@@ -38,10 +38,12 @@ const AGENTIC_CONFIG = {
 /* Structured symptom knowledge base — doubles as the LLM prompt
  * context AND the local fallback's matching table. */
 const SYMPTOM_DB = {
-  flu:    { symptoms: ['fever', 'cough', 'body aches'],                          baseAcuity: 2, category: 'AMBULATORY / VIRAL' },
-  webmd:  { symptoms: ['self-diagnosed rare disease', 'anxiety', '40-page printout'], baseAcuity: 1, category: 'LOW ACUITY / REASSURE' },
-  trauma: { symptoms: ['blunt-force injury', 'bleeding', 'shock risk'],          baseAcuity: 4, category: 'TRAUMA / IMMEDIATE' },
-  silent: { symptoms: ['mild jaw pain', 'fatigue', 'diaphoresis'],               baseAcuity: 5, category: 'CRITICAL / CARDIAC' },
+  flu:      { symptoms: ['fever', 'cough', 'body aches'],                     baseAcuity: 2, category: 'VIRAL / GENERAL WARD' },
+  bacteria: { symptoms: ['localized infection', 'elevated WBC', 'abscess'],   baseAcuity: 3, category: 'BACTERIAL / PHARMACY' },
+  virus:    { symptoms: ['high fever', 'rash', 'novel presentation'],         baseAcuity: 3, category: 'VIRAL / VIROLOGY LAB' },
+  spore:    { symptoms: ['respiratory distress', 'exposure cluster', 'contagion risk'], baseAcuity: 4, category: 'AIRBORNE / ISOLATE IN VIROLOGY' },
+  trauma:   { symptoms: ['blunt-force injury', 'bleeding', 'shock risk'],     baseAcuity: 4, category: 'TRAUMA / SURGERY' },
+  cardiac:  { symptoms: ['mild jaw pain', 'fatigue', 'diaphoresis'],          baseAcuity: 5, category: 'CRITICAL / CARDIOLOGY' },
 };
 
 function buildPatientManifest(patient) {
@@ -51,7 +53,6 @@ function buildPatientManifest(patient) {
     `presenting: ${db.symptoms.join(', ')}`,
     `vitals_stability: ${Math.round(patient.health)}/100`,
     `case_complexity: ${Math.round(patient.complexity)}`,
-    `minutes_waiting: ${patient.untreatedTime.toFixed(1)}`,
   ].join('\n');
 }
 
