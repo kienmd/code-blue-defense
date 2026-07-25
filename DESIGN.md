@@ -82,6 +82,44 @@ Resolution is a presentation pass, no mechanics change:
    monster that re-inflates complexity shields). Patients are victims;
    disease and bureaucracy are the antagonists.
 
+## PIVOT 2: Fallout Shelter layout (rooms + allocation)
+
+Reference: Fallout Shelter's side-view vault cross-section. The corridor/path
+TD is replaced by a **buildable hospital cross-section**:
+
+- **Building**: ground-floor lobby (entrance + waiting area) + elevator shaft
+  + 5 upper floors x 3 room slots. Player builds rooms into empty slots.
+- **Rooms** (the "towers" are now rooms): General Ward, Pharmacy, Virology
+  Lab, Surgery, Cardiology, Break Room. Each treatment room has 2 beds and
+  2 staff slots.
+- **Allocation is the core verb**: patients arrive in the lobby carrying a
+  visible pathogen sprite (empathy fix intact — the ailment takes the
+  treatment, never the person). Click patient -> click room. Right room
+  treats at full speed; wrong room crawls at 30%.
+- **Diagnosis layer**: patients arrive UNDIAGNOSED (grey "?" germ). A nurse
+  assigned to the lobby diagnoses them one at a time. The Agentic Lab-Router
+  upgrade auto-diagnoses instantly AND auto-assigns to a free matching bed —
+  the agentic showcase.
+- **Pathogen roster** (each with distinct ailment sprite + destination room):
+
+  | Pathogen | Room | Quirk |
+  |---|---|---|
+  | Influenza | General Ward | swarm fodder, mild |
+  | Bacteria | Pharmacy | tanky (high complexity) |
+  | Virus | Virology Lab | high complexity, decent payout |
+  | Airborne Spore | Virology Lab | CONTAGIOUS: harms other lobby waiters until isolated |
+  | Trauma | Surgery | fast deterioration |
+  | Cardiac Event | Cardiology | fastest deterioration, top payout |
+
+- **Staff**: hire Nurse / Doctor; walk to assigned room via elevator;
+  burnout meter persists from the previous design; Break Rooms grant
+  passive stress recovery.
+- **Shifts replace waves**: 10 escalating shifts (flu season -> spore
+  outbreak -> mass casualty -> final crunch), one persistent building for
+  the whole run. Stars by ICU transfers avoided.
+- Deferred to backlog: room upgrades/merging, multiple hospitals
+  (level select), staff traits, insurance-monster villain wave.
+
 ## Decisions log
 
 - 2026-07-24 — Name: **Code Blue Defense**. Repo created. Ideation begins.
@@ -99,3 +137,8 @@ Resolution is a presentation pass, no mechanics change:
 - 2026-07-24 — Empathy fix locked: patients are never the visual target.
   Ailment sprites take the hits; discharge is a celebration; combat
   vocabulary removed from HUD and effects (see section above).
+- 2026-07-24 — PIVOT 2 locked: Fallout Shelter-style cross-section.
+  Rooms are built into floor slots; patients are allocated to beds;
+  6 pathogen types each route to a specific room; diagnosis gates
+  routing; Lab-Router becomes an auto-triage agent. Option B heal-flip
+  + empathy presentation carry over wholesale.
