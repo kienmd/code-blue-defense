@@ -68,6 +68,13 @@ class Patient {
     this.blurtT = 0;                // auto-blurt bubble timer on sit-down
     this.bob = Math.random() * Math.PI * 2;
     this.sporeTimer = SPORE_PULSE;
+    const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+    this.look = {
+      skin: pick(PATIENT_SKINS),
+      hair: pick(PATIENT_HAIRS),
+      style: Math.floor(Math.random() * HAIR_STYLE_COUNT),
+      gown: pick(PATIENT_GOWNS),
+    };
   }
 
   floor() { return this.room ? this.room.floor : 0; }
@@ -156,20 +163,31 @@ class Room {
  * skill-based visual hint that shows what's wrong before diagnosis
  * (cracked helmet, chest clutch, green cough...). t drives tiny
  * animations (shivers, cough pixels). */
-function drawPatientSprite(ctx, cx, cy, bobPhase, mood = 'sick', typeKey = null, t = 0) {
+const DEFAULT_LOOK = { skin: '#f2c8a8', hair: '#5a4632', style: 1, gown: '#9fc4e8' };
+
+function drawPatientSprite(ctx, cx, cy, bobPhase, mood = 'sick', typeKey = null, t = 0, look = DEFAULT_LOOK) {
   const bob = Math.round(Math.sin(bobPhase) * 1.5);
   const shiver = (mood === 'sick' && typeKey === 'flu') ? Math.round(Math.sin(t * 34) * 1) : 0;
   ctx.save();
   ctx.translate(Math.round(cx + shiver), Math.round(cy + bob));
   // head
-  ctx.fillStyle = mood === 'sick' ? '#d8e0b0' : '#f2c8a8'; // green-tinged when ill
+  ctx.fillStyle = look.skin;
   ctx.fillRect(-3, -20, 6, 5);
+  if (mood === 'sick') {
+    ctx.fillStyle = '#b8d090';                               // queasy green cheeks
+    ctx.fillRect(-3, -17, 1, 1); ctx.fillRect(2, -17, 1, 1);
+  }
+  // hair (per-patient style + color; 0 = bald)
+  ctx.fillStyle = look.hair;
+  if (look.style === 1) ctx.fillRect(-3, -21, 6, 2);                                   // flat
+  else if (look.style === 2) { ctx.fillRect(-3, -23, 6, 4); }                          // tall
+  else if (look.style === 3) { ctx.fillRect(-4, -20, 1, 3); ctx.fillRect(3, -20, 1, 3); ctx.fillRect(-3, -21, 6, 1); } // side tufts
   // face
   ctx.fillStyle = PALETTE.ink;
   if (mood === 'happy') { ctx.fillRect(-2, -18, 1, 1); ctx.fillRect(1, -18, 1, 1); ctx.fillRect(-1, -16.5, 2, 1); }
   else { ctx.fillRect(-2, -18, 1, 1); ctx.fillRect(1, -18, 1, 1); }
   // gown
-  ctx.fillStyle = '#9fc4e8';
+  ctx.fillStyle = look.gown;
   ctx.fillRect(-5, -15, 10, 11);
   ctx.fillStyle = PALETTE.white;
   ctx.fillRect(-2, -13, 4, 4);
@@ -177,20 +195,20 @@ function drawPatientSprite(ctx, cx, cy, bobPhase, mood = 'sick', typeKey = null,
   ctx.fillRect(-1, -13, 2, 4); ctx.fillRect(-2, -12, 4, 2);   // little red cross patch
   // arms up when cured
   if (mood === 'happy') {
-    ctx.fillStyle = '#f2c8a8';
+    ctx.fillStyle = look.skin;
     ctx.fillRect(-8, -19, 3, 3); ctx.fillRect(5, -19, 3, 3);
   }
   // legs
   ctx.fillStyle = PALETTE.ink;
   ctx.fillRect(-4, -4, 3, 4); ctx.fillRect(1, -4, 3, 4);
 
-  if (mood === 'sick' && typeKey) drawPresentingTell(ctx, typeKey, t);
+  if (mood === 'sick' && typeKey) drawPresentingTell(ctx, typeKey, t, look);
   ctx.restore();
 }
 
 /* The per-pathogen presenting tell, drawn in patient-local coords
  * (origin at the feet). These read BEFORE diagnosis. */
-function drawPresentingTell(ctx, typeKey, t) {
+function drawPresentingTell(ctx, typeKey, t, look = DEFAULT_LOOK) {
   if (typeKey === 'flu') {
     ctx.fillStyle = PALETTE.brightRed;                      // rudolph nose
     ctx.fillRect(-1, -18, 2, 2);
@@ -224,7 +242,7 @@ function drawPresentingTell(ctx, typeKey, t) {
     ctx.fillRect(-5, -13, 8, 2);
     ctx.fillRect(2, -12, 2, 3);
   } else if (typeKey === 'cardiac') {
-    ctx.fillStyle = '#f2c8a8';                              // hand clutching chest
+    ctx.fillStyle = look.skin;                              // hand clutching chest
     ctx.fillRect(-1, -12, 4, 3);
     ctx.fillStyle = PALETTE.brightRed;                      // pained blip
     if (Math.sin(t * 6) > 0.3) ctx.fillRect(5, -20, 2, 2);

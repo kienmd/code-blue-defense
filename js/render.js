@@ -98,7 +98,7 @@ function render() {
   ctx.fillStyle = '#2e3c5c';
   ctx.fillRect(ELEV_X + 4, bTop, 2, GROUND_Y - bTop);
   ctx.fillRect(ELEV_X + ELEV_W - 6, bTop, 2, GROUND_Y - bTop);
-  for (let f = 0; f < NUM_FLOORS; f++) {
+  for (let f = 0; f <= topFloor; f++) {
     ctx.fillStyle = PALETTE.frame;
     ctx.fillRect(ELEV_X, floorTopY(f) + FLOOR_H - 4, ELEV_W, 4);
   }
@@ -295,12 +295,12 @@ function drawPatientEntity(p) {
     ctx.globalAlpha = on ? 1 : 0.35;
     ctx.fillStyle = '#c8d8dc';
     ctx.fillRect(p.x - 14, p.y - 8, 28, 5);
-    drawPatientSprite(ctx, p.x, p.y - 6, 0, 'sick', p.typeKey, G.time);
+    drawPatientSprite(ctx, p.x, p.y - 6, 0, 'sick', p.typeKey, G.time, p.look);
     ctx.globalAlpha = 1;
     return;
   }
   const mood = p.state === 'exiting' ? 'happy' : 'sick';
-  drawPatientSprite(ctx, p.x, p.y, G.time * 5 + p.bob, mood, p.typeKey, G.time + p.bob);
+  drawPatientSprite(ctx, p.x, p.y, G.time * 5 + p.bob, mood, p.typeKey, G.time + p.bob, p.look);
   if (p.state === 'exiting') return;                       // cured: no bars, no germ
 
   // The ailment — the actual enemy — rides above the patient.
@@ -319,6 +319,18 @@ function drawPatientEntity(p) {
   ctx.fillStyle = PALETTE.blue;
   ctx.fillRect(p.x - bw / 2, p.y - 40, bw * Math.max(0, p.complexity / p.maxComplexity), 3);
   if (p.aiTag) { ctx.fillStyle = PALETTE.toxic; ctx.fillRect(p.x + bw / 2 + 2, p.y - 44, 3, 3); }
+
+  // Wait-time counter: rides the deterioration clock — neutral while
+  // healthy, amber as the disease gains, red when critical.
+  if (p.state === 'waiting') {
+    const wait = Math.max(0, G.time - p.spawnT);
+    const m = Math.floor(wait / 60), sec = Math.floor(wait % 60);
+    ctx.font = FONT;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = hf > 0.5 ? '#8aa0b8' : (hf > 0.25 ? PALETTE.amber : PALETTE.brightRed);
+    ctx.fillText(m ? `${m}:${String(sec).padStart(2, '0')}` : `${sec}s`, p.x, p.y - 48);
+    ctx.textAlign = 'left';
+  }
 }
 
 function drawStaffEntity(s) {

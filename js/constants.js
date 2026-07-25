@@ -113,6 +113,15 @@ const PATHOGENS = {
   },
 };
 
+/* ---------- Patient looks (visual variety) ----------
+ * Rolled once per patient at spawn: skin tone, hair color, hair
+ * style index (see drawPatientSprite), gown shade. Pure cosmetics.
+ */
+const PATIENT_SKINS = ['#f6d8c0', '#f2c8a8', '#e8b088', '#c68863', '#a06844', '#7c4a2d'];
+const PATIENT_HAIRS = ['#2b2b2b', '#5a4632', '#8a5a28', '#c8a050', '#d0d0d0', '#a04828'];
+const PATIENT_GOWNS = ['#9fc4e8', '#a8e0c0', '#e0c0e8', '#f0e0a8', '#c0c8f0'];
+const HAIR_STYLE_COUNT = 4;     // 0 bald, 1 flat, 2 tall, 3 side tufts
+
 // Spore contagion: every PULSE seconds, other lobby waiters lose DMG health.
 const SPORE_PULSE = 4;
 const SPORE_DMG   = 3;
