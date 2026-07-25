@@ -130,6 +130,7 @@ function dropUpgrade(key, px, py) {
     G.budget -= def.cost;
     G.addText(120, floorWalkY(0) - 50, 'PRIOR-AUTH AGENT ONLINE', PALETTE.toxic, 2);
   }
+  G.shiftStats.spent += def.cost;
   G.sfx('buy');
   refreshShop();
 }

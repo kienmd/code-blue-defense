@@ -183,13 +183,6 @@ function render() {
     ctx.globalAlpha = 1;
   }
 
-  // Prep countdown
-  if (G.state === 'playing' && G.phase === 'prep') {
-    ctx.fillStyle = PALETTE.amber;
-    ctx.font = '8px "Press Start 2P", monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText(`NEXT SHIFT IN ${Math.ceil(G.prepTimer)}…`, 8, canvas.height - 8);
-  }
   ctx.textAlign = 'left';
 }
 

@@ -4,7 +4,8 @@
  * Each shift lists arrival entries: {type, count, interval}.
  * Entries interleave with a phase offset so mixed shifts arrive
  * shuffled. A shift ends when every arrival has been resolved
- * (discharged or transferred); then PREP_SECONDS of calm.
+ * (discharged or transferred); then a player-paced cool-off —
+ * the next shift starts when the player clicks START SHIFT.
  * Banner shifts flash an event warning + siren.
  * ============================================================ */
 

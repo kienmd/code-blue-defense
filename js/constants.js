@@ -212,5 +212,4 @@ const UPGRADE_TYPES = {
 /* ---------- Run structure ---------- */
 const START_BUDGET = 600;
 const START_LIVES  = 5;         // ICU capacity — transfers that end the run
-const PREP_SECONDS = 8;         // between shifts
 const AUTO_ASSIGN_PERIOD = 1;   // labRouter scan interval (sec)

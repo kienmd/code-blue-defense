@@ -38,6 +38,20 @@
         </p>
       </div>
 
+      <!-- End-of-shift report overlay -->
+      <div id="report" class="overlay hidden">
+        <h1 id="report-title">SHIFT 1 REPORT</h1>
+        <p id="report-detail"></p>
+        <p id="report-flavor" class="hint"></p>
+        <div class="btn-row">
+          <button id="btn-next-shift" class="pxbtn primary">START SHIFT 2</button>
+          <button id="btn-keep-building" class="pxbtn">KEEP BUILDING</button>
+        </div>
+      </div>
+
+      <!-- Player-paced start button (cool-off phase) -->
+      <button id="btn-shift" class="pxbtn primary hidden">START SHIFT 1</button>
+
       <!-- Win / loss overlay -->
       <div id="result" class="overlay hidden">
         <h1 id="result-title">ALL SHIFTS COMPLETE</h1>

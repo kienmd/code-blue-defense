@@ -6,6 +6,12 @@
 el.btnStart.addEventListener('click', () => { ensureAudio(); G.sfx('buy'); startRun(); });
 el.btnRetry.addEventListener('click', () => { ensureAudio(); startRun(); });
 el.btnMenu.addEventListener('click', showMenu);
+el.btnShift.addEventListener('click', () => { ensureAudio(); G.sfx('buy'); startShift(); });
+el.btnNextShift.addEventListener('click', () => { ensureAudio(); G.sfx('buy'); startShift(); });
+el.btnKeepBuilding.addEventListener('click', () => {
+  el.report.classList.add('hidden');
+  refreshShiftButton();
+});
 window.addEventListener('pointerdown', ensureAudio, { once: true });
 
 let lastTs = 0;

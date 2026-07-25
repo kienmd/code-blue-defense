@@ -18,25 +18,35 @@ function startRun() {
   G.waitSpots = new Array(WAIT_SPOTS).fill(null);
   G.upgrades = { labRouter: false, priorAuth: false };
   G.shiftIdx = -1;
-  G.phase = 'prep';
-  G.prepTimer = 14;                 // generous first prep: build + hire
+  G.phase = 'cooloff';              // player-paced: build + hire, then click START
   G.schedule = [];
+  G.shiftStats = freshShiftStats();
   G.selection = null;
   G.buildType = null;
   G.texts = [];
   G.particles = [];
   el.menu.classList.add('hidden');
   el.result.classList.add('hidden');
-  showBanner('BUILD A WARD + HIRE A NURSE<br/>FIRST PATIENTS INBOUND', 'info', 4);
+  el.report.classList.add('hidden');
+  showBanner('BUILD A WARD + HIRE A NURSE<br/>THEN START SHIFT 1', 'info', 4);
   refreshShop();
+  refreshShiftButton();
+}
+
+function freshShiftStats() {
+  return { helped: 0, transfers: 0, earned: 0, spent: 0, burnouts: 0, fastestCure: null, longestWait: 0 };
 }
 
 function startShift() {
+  if (G.state !== 'playing' || G.phase !== 'cooloff') return;
   G.shiftIdx++;
   const shift = SHIFTS[G.shiftIdx];
   G.phase = 'shift';
   G.shiftElapsed = 0;
   G.schedule = [];
+  G.shiftStats = freshShiftStats();
+  el.report.classList.add('hidden');
+  refreshShiftButton();
   shift.entries.forEach((entry, ei) => {
     for (let i = 0; i < entry.count; i++) {
       G.schedule.push({ t: 1 + ei * 1.7 + i * entry.interval, type: entry.type });
@@ -57,12 +67,26 @@ function endRun(won) {
     setBest(stars, G.discharged);
   }
   showResult(won, stars);
+  refreshShiftButton();
   if (won) { playSfx('discharge'); setTimeout(() => playSfx('buy'), 200); } else { playSfx('transfer'); }
+}
+
+function endShift() {
+  // Round over: show the SHIFT REPORT, then hold in player-paced
+  // cool-off until they click START SHIFT N+1.
+  G.phase = 'cooloff';
+  G.selection = null;
+  G.buildType = null;
+  showShiftReport();
+  refreshShiftButton();
+  refreshShop();
+  G.sfx('discharge');
 }
 
 /* ---------- Spawning + allocation ---------- */
 function spawnPatient(type) {
   const p = new Patient(type);
+  p.spawnT = G.time;                           // for cure-speed / wait-time report stats
   let spot = G.waitSpots.indexOf(null);
   if (spot === -1) spot = WAIT_SPOTS - 1;      // overflow: crowd the last spot
   else G.waitSpots[spot] = p;
@@ -94,6 +118,7 @@ function assignPatientToRoom(p, room) {
   const bed = room.freeBed();
   if (bed === -1) { G.sfx('denied'); G.addText(p.x, p.y - 30, 'NO FREE BED', PALETTE.amber, 1); return false; }
   freeWaitSpot(p);
+  G.shiftStats.longestWait = Math.max(G.shiftStats.longestWait, G.time - p.spawnT);
   room.beds[bed] = p;
   p.room = room;
   p.bedIndex = bed;
@@ -134,6 +159,7 @@ function hireStaff(typeKey) {
   const def = STAFF_TYPES[typeKey];
   if (G.budget < def.cost) { G.sfx('denied'); return; }
   G.budget -= def.cost;
+  G.shiftStats.spent += def.cost;
   const s = new Staff(typeKey);
   s.x = -20; s.y = floorWalkY(0);
   s.state = 'walking';
@@ -149,6 +175,7 @@ function buildRoom(typeKey, floor, slot) {
   const def = ROOM_TYPES[typeKey];
   if (G.budget < def.cost) { G.sfx('denied'); return; }
   G.budget -= def.cost;
+  G.shiftStats.spent += def.cost;
   const r = new Room(typeKey, floor, slot);
   G.rooms.push(r);
   G.addText(r.x + r.w / 2, r.y + 30, `${def.name.toUpperCase()} BUILT`, def.color, 1.6);
@@ -161,20 +188,16 @@ function update(dt) {
   if (G.state !== 'playing') return;
   G.time += dt;
 
-  // Shift phases
-  if (G.phase === 'prep') {
-    G.prepTimer -= dt;
-    if (G.prepTimer <= 0) startShift();
-  } else {
+  // Shift phases — cool-off is player-paced: no arrivals until the
+  // player clicks START SHIFT (no auto-timer).
+  if (G.phase === 'shift') {
     G.shiftElapsed += dt;
     while (G.schedule.length && G.schedule[0].t <= G.shiftElapsed) {
       spawnPatient(G.schedule.shift().type);
     }
     if (!G.schedule.length && G.patients.length === 0) {
       if (G.shiftIdx >= SHIFTS.length - 1) { endRun(true); return; }
-      G.phase = 'prep';
-      G.prepTimer = PREP_SECONDS;
-      showBanner(`SHIFT ${G.shiftIdx + 1} COMPLETE`, 'info', 1.6);
+      endShift();
     }
   }
 
@@ -239,8 +262,10 @@ function updatePatients(dt) {
     if (p.outcome === 'transferred') {
       G.lives--;
       G.transfers++;
+      G.shiftStats.transfers++;
     } else if (p.outcome === 'walked_out') {
       G.discharged++;
+      G.shiftStats.helped++;
     }
   }
   G.patients = G.patients.filter(p => !p.outcome);
@@ -251,6 +276,9 @@ function dischargePatient(p) {
   const mult = G.upgrades.priorAuth ? UPGRADE_TYPES.priorAuth.payoutMult : 1;
   const pay = Math.round(p.def.payout * mult);
   G.budget += pay;
+  G.shiftStats.earned += pay;
+  const cureT = G.time - p.spawnT;
+  if (G.shiftStats.fastestCure === null || cureT < G.shiftStats.fastestCure) G.shiftStats.fastestCure = cureT;
   if (p.room) { p.room.beds[p.bedIndex] = null; p.room = null; p.bedIndex = -1; }
   p.state = 'exiting';
   p.complexity = 0;
@@ -312,6 +340,7 @@ function updateStaff(dt) {
         s.burnoutUntil = G.time + BURNOUT_SECONDS;
         s.stress = 0;
         s.diagPatient = null;
+        G.shiftStats.burnouts++;
         G.addText(s.x, s.y - 36, 'BURNOUT!', PALETTE.red, 1.6);
         G.sfx('burnout');
       }

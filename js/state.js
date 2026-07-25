@@ -17,12 +17,13 @@ const G = {
   patients: [],
   waitSpots: new Array(WAIT_SPOTS).fill(null),   // Patient refs
   upgrades: { labRouter: false, priorAuth: false },
-  // shift engine
+  // shift engine — 'cooloff' is player-paced (no arrivals, build/hire
+  // freely); a shift only starts when the player clicks START SHIFT.
   shiftIdx: -1,
-  phase: 'prep',
-  prepTimer: 0,
+  phase: 'cooloff',
   shiftElapsed: 0,
   schedule: [],
+  shiftStats: null,         // per-shift report tally, reset by startShift()
   // input
   selection: null,          // {kind:'patient'|'staff', obj}
   buildType: null,

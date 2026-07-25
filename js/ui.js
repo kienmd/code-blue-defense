@@ -25,6 +25,13 @@ const el = {
   btnRetry: document.getElementById('btn-retry'),
   btnMenu: document.getElementById('btn-menu'),
   banner: document.getElementById('banner'),
+  report: document.getElementById('report'),
+  reportTitle: document.getElementById('report-title'),
+  reportDetail: document.getElementById('report-detail'),
+  reportFlavor: document.getElementById('report-flavor'),
+  btnNextShift: document.getElementById('btn-next-shift'),
+  btnKeepBuilding: document.getElementById('btn-keep-building'),
+  btnShift: document.getElementById('btn-shift'),
   shopRooms: document.getElementById('shop-rooms'),
   shopStaff: document.getElementById('shop-staff'),
   shopUpgrades: document.getElementById('shop-upgrades'),
@@ -46,7 +53,9 @@ function showBanner(html, kind, seconds) {
 function refreshHud() {
   el.budget.textContent = `$${G.budget}`;
   el.lives.innerHTML = `ICU ${'\u2665'.repeat(Math.max(0, G.lives))}${'\u2661'.repeat(Math.max(0, START_LIVES - G.lives))}`;
-  el.shift.textContent = G.shiftIdx < 0 ? 'PREP' : `SHIFT ${G.shiftIdx + 1}/${SHIFTS.length}`;
+  el.shift.textContent = G.phase === 'cooloff'
+    ? `COOL-OFF \u00b7 NEXT: SHIFT ${G.shiftIdx + 2}/${SHIFTS.length}`
+    : `SHIFT ${G.shiftIdx + 1}/${SHIFTS.length}`;
   el.waiting.textContent = `WAITING ${waitingPatients().length}`;
 }
 
@@ -59,6 +68,37 @@ function showMenu() {
     ? `BEST RUN: ${'\u2605'.repeat(best.stars)} \u00b7 ${best.discharged} PATIENTS HELPED`
     : '';
   el.menu.classList.remove('hidden');
+}
+
+/* ---------- Shift report + player-paced start button ---------- */
+function fmtSecs(s) {
+  const m = Math.floor(s / 60), r = Math.floor(s % 60);
+  return m ? `${m}:${String(r).padStart(2, '0')}` : `${r}s`;
+}
+
+function showShiftReport() {
+  const st = G.shiftStats;
+  el.reportTitle.textContent = `SHIFT ${G.shiftIdx + 1} REPORT`;
+  el.reportDetail.innerHTML =
+    `PATIENTS HELPED: <b>${st.helped}</b> \u00b7 ICU TRANSFERS: <b>${st.transfers}</b><br/>` +
+    `EARNED: <b>$${st.earned}</b> \u00b7 SPENT: <b>$${st.spent}</b><br/>` +
+    `STAFF BURNOUTS: <b>${st.burnouts}</b><br/>` +
+    `TOTALS \u2014 HELPED ${G.discharged} \u00b7 TRANSFERS ${G.transfers} \u00b7 BUDGET $${G.budget}`;
+  let flavor;
+  if (st.helped === 0) flavor = 'ROUGH ONE. NOBODY WALKED OUT SMILING.';
+  else if (st.fastestCure !== null && st.fastestCure < 20) flavor = `FASTEST CURE: ${fmtSecs(st.fastestCure)} \u2014 NICE HUSTLE.`;
+  else if (st.longestWait > 30) flavor = `LONGEST WAIT: ${fmtSecs(st.longestWait)} \u2014 SOMEONE CAMPED IN THE LOBBY.`;
+  else if (st.burnouts > 0) flavor = 'THE BREAK ROOM IS CALLING. YOUR STAFF NEED IT.';
+  else flavor = `FASTEST CURE: ${st.fastestCure === null ? '\u2014' : fmtSecs(st.fastestCure)} \u00b7 LONGEST WAIT: ${fmtSecs(st.longestWait)}`;
+  el.reportFlavor.textContent = flavor;
+  el.btnNextShift.textContent = `START SHIFT ${G.shiftIdx + 2}`;
+  el.report.classList.remove('hidden');
+}
+
+function refreshShiftButton() {
+  const show = G.state === 'playing' && G.phase === 'cooloff' && el.report.classList.contains('hidden');
+  el.btnShift.classList.toggle('hidden', !show);
+  if (show) el.btnShift.textContent = `START SHIFT ${G.shiftIdx + 2}`;
 }
 
 function showResult(won, stars) {

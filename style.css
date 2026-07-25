@@ -119,6 +119,22 @@ canvas#game {
 #result-stars { font-size: 30px; color: var(--amber); letter-spacing: 8px; }
 #result-detail { font-size: 9px; color: #9fb4c8; line-height: 1.9; }
 
+#report h1 { font-size: 18px; color: var(--amber); text-shadow: 4px 4px 0 #3a2600; }
+#report-detail { font-size: 9px; color: #9fb4c8; line-height: 2; }
+#report-detail b { color: var(--ink); }
+#report-flavor { color: var(--green); }
+
+/* Floating START SHIFT button during player-paced cool-off */
+#btn-shift {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12;
+  animation: shiftpulse 1s steps(2) infinite;
+}
+@keyframes shiftpulse { 50% { border-color: var(--amber); color: var(--amber); } }
+
 .btn-row { display: flex; gap: 12px; }
 .pxbtn {
   font-family: var(--font);
