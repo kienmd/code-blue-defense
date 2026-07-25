@@ -591,7 +591,7 @@
       const slot = slotFromPoint(x, y);
       if (slot && !roomAt(slot.floor, slot.slot)) {
         buildRoom(G.buildType, slot.floor, slot.slot);
-        if (G.budget < ROOM_TYPES[G.buildType].cost) G.buildType = null;
+        G.buildType = null;                  // one build per selection — no sticky mode
         refreshShop();
       } else G.sfx('denied');
       return;
@@ -1124,4 +1124,7 @@
   refreshShop();
   showMenu();
   requestAnimationFrame(frame);
+
+  // Debug/test hook (harmless in production; used by automated playtests)
+  window.CBD = G;
 })();
