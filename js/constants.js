@@ -227,6 +227,41 @@ const UPGRADE_TYPES = {
   },
 };
 
+/* ---------- Eras (round-defining decade cards) ----------
+ * Canonical shift->decade mapping from docs/ERAS.md: one decade per
+ * shift from the 1950s, a doubled 2020s (shifts 8-9), 2030s finale.
+ * `startShift` is 0-based; lookup takes the last era whose
+ * startShift <= shift. `inflation` is the economy knob reserved for
+ * the tech-tree PR (docs/TECH_TREE.md) — stored, not yet applied.
+ */
+const ERAS = [
+  { startShift: 0, label: '1950s', sign: 'EST. 1952', inflation: 0.5,
+    sub: 'THE MODERN HOSPITAL IS BORN', body: 'OPEN-HEART SURGERY! THE ICU! AND EVERY CHART IS PAPER.' },
+  { startShift: 1, label: '1960s', sign: '1960s', inflation: 0.6,
+    sub: 'RESUSCITATION GETS ORGANIZED', body: 'CPR IS INVENTED. CRASH CARTS ROLL. CARDIAC PATIENTS GET THEIR OWN WARD.' },
+  { startShift: 2, label: '1970s', sign: '1970s', inflation: 0.7,
+    sub: 'THE CT SCANNER SEES ALL', body: 'CROSS-SECTION PICTURES OF A LIVING BRAIN. PARAMEDICS HIT THE STREETS.' },
+  { startShift: 3, label: '1980s', sign: '1980s', inflation: 0.85,
+    sub: 'IMAGING GOES MAINSTREAM', body: 'MRI! KEYHOLE SURGERY! A PULSE-OX ON EVERY FINGER.' },
+  { startShift: 4, label: '1990s', sign: '1990s', inflation: 1.0,
+    sub: 'THE DIGITAL SEED', body: 'X-RAY FILM GOES FILMLESS. STENTS PROP ARTERIES OPEN.' },
+  { startShift: 5, label: '2000s', sign: '2000s', inflation: 1.2,
+    sub: 'THE CHART GOES DIGITAL', body: 'UNCLE SAM PAYS HOSPITALS TO DITCH PAPER. E-PRESCRIBING KILLS THE FAX (ALMOST).' },
+  { startShift: 6, label: '2010s', sign: '2010s', inflation: 1.5,
+    sub: 'CONNECTED + QUANTIFIED', body: 'THE DOCTOR WILL SEE YOU NOW — ON VIDEO. AI READS ITS FIRST SCANS.' },
+  { startShift: 7, label: '2020s', sign: '2020s', inflation: 1.8,
+    sub: 'THE AI DECADE', body: 'IT LISTENS, WRITES THE NOTE, FILES THE CLAIM. THE HOSPITAL MAKES HOUSE CALLS AGAIN.' },
+  { startShift: 9, label: '20??s', sign: '20??s', inflation: 2.2,
+    sub: 'THE AGENTIC WARD', body: 'AI RUNS THE FLOOR. HUMANS SUPERVISE. (WE\'RE GUESSING — YOU\'LL LIVE IT.)' },
+];
+function eraForShift(i) {
+  let era = ERAS[0];
+  for (const e of ERAS) { if (e.startShift <= i) era = e; }
+  return era;
+}
+
+const ERA_CARD_SECONDS = 3.2;   // slide in, hold, fade out
+
 /* ---------- Run structure ---------- */
 const START_BUDGET = 600;
 const START_LIVES  = 5;         // ICU capacity — transfers that end the run

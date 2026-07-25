@@ -36,6 +36,12 @@ const SFX = {
   denied:    () => tone(160, 0.12, 'square', 0.04),
   select:    () => tone(520, 0.04, 'sine', 0.025),
   assign:    () => { tone(520, 0.05); tone(700, 0.06, 'square', 0.03, 0.05); },
+  era:       () => {                       // decade card sting: rising triad + shimmer
+    tone(392, 0.14, 'square', 0.045);
+    tone(523, 0.14, 'square', 0.045, 0.14);
+    tone(659, 0.22, 'square', 0.045, 0.28);
+    tone(1046, 0.3, 'triangle', 0.03, 0.42);
+  },
 };
 
 function playSfx(name) { (SFX[name] || (() => {}))(); }

@@ -53,7 +53,8 @@ function render() {
   ctx.font = FONT;
   ctx.fillStyle = PALETTE.blue;
   ctx.textAlign = 'left';
-  ctx.fillText('CODE BLUE GENERAL', 420, bTop - 20);
+  const signEra = eraForShift(G.phase === 'cooloff' ? G.shiftIdx + 1 : Math.max(0, G.shiftIdx));
+  ctx.fillText(`CODE BLUE GENERAL \u00b7 ${signEra.sign}`, 420, bTop - 20);
 
   // Floors — only the ones in use, plus the next buildable floor as a
   // dimmed "expansion" hint. The hospital visibly grows as you build.
@@ -214,6 +215,44 @@ function render() {
     ctx.fillText(hint, canvas.width / 2, 14);
   }
 
+  if (G.eraCard) drawEraCard(G.eraCard);
+
+  ctx.textAlign = 'left';
+}
+
+/* Age of War-style decade card: slides in from the left, holds,
+ * fades out. Screen space, drawn over everything. */
+function drawEraCard(card) {
+  const IN = 0.5, HOLD = 2.0;                              // + fade = ERA_CARD_SECONDS
+  const t = card.t;
+  const cx = canvas.width / 2, cy = canvas.height * 0.36;
+  let slide = 0, alpha = 1;
+  if (t < IN) {
+    const f = 1 - t / IN;
+    slide = -f * f * canvas.width * 0.6;                   // ease-out sweep
+  } else if (t > IN + HOLD) {
+    alpha = Math.max(0, 1 - (t - IN - HOLD) / (ERA_CARD_SECONDS - IN - HOLD));
+  }
+  ctx.globalAlpha = alpha * 0.55;
+  ctx.fillStyle = '#060a14';
+  ctx.fillRect(0, cy - 64, canvas.width, 122);
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = PALETTE.amber;
+  ctx.fillRect(0, cy - 64, canvas.width, 3);
+  ctx.fillRect(0, cy + 55, canvas.width, 3);
+  ctx.textAlign = 'center';
+  ctx.font = '42px "Press Start 2P", monospace';
+  ctx.fillStyle = '#3a2600';
+  ctx.fillText(card.label, cx + slide + 4, cy + 4);        // drop shadow
+  ctx.fillStyle = PALETTE.amber;
+  ctx.fillText(card.label, cx + slide, cy);
+  ctx.font = '10px "Press Start 2P", monospace';
+  ctx.fillStyle = PALETTE.white;
+  ctx.fillText(card.sub, cx - slide, cy + 24);             // counter-sweep
+  ctx.font = '7px "Press Start 2P", monospace';
+  ctx.fillStyle = '#8aa0b8';
+  ctx.fillText(card.body, cx, cy + 44);
+  ctx.globalAlpha = 1;
   ctx.textAlign = 'left';
 }
 

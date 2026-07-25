@@ -29,6 +29,7 @@ const G = {
   zoom: 1,
   view: { s: 1, ox: 0, oy: 0 },
   buildFlash: null,         // {floor, slot, t} — highlight where a room landed
+  eraCard: null,            // {t, label, sub, body} — decade sweep at shift start
   // input
   selection: null,          // {kind:'patient'|'staff', obj}
   hover: null,              // {x,y} WORLD coords

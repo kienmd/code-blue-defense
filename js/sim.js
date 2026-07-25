@@ -52,8 +52,16 @@ function startShift() {
     }
   });
   G.schedule.sort((a, b) => a.t - b.t);
+
+  // Era title card defines the round (docs/ERAS.md decade march).
+  // Only sweep it when the decade CHANGES (the 2020s span two shifts).
+  const era = eraForShift(G.shiftIdx);
+  const prevEra = G.shiftIdx > 0 ? eraForShift(G.shiftIdx - 1) : null;
+  if (era !== prevEra) {
+    G.eraCard = { t: 0, label: era.label, sub: era.sub, body: era.body };
+    G.sfx('era');
+  }
   if (shift.banner) { showBanner(shift.banner, 'alert', 3); G.sfx('siren'); }
-  else showBanner(`SHIFT ${G.shiftIdx + 1} / ${SHIFTS.length}`, 'info', 1.6);
 }
 
 function endRun(won) {
@@ -220,6 +228,10 @@ function update(dt) {
   if (G.buildFlash) {
     G.buildFlash.t += dt;
     if (G.buildFlash.t > 1.2) G.buildFlash = null;
+  }
+  if (G.eraCard) {
+    G.eraCard.t += dt;
+    if (G.eraCard.t > ERA_CARD_SECONDS) G.eraCard = null;
   }
 
   for (const t of G.texts) t.t += dt;
