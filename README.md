@@ -89,17 +89,17 @@ js/game.js        engine loop, input, drag-drop, waves, render, HUD
 DESIGN.md         design ideation history
 ```
 
-## API keys (optional — the game runs fully without them)
+## Audio & narration
 
-Put your keys in `js/keys.local.js` — **it is gitignored**, so they never
-land in a commit:
+The game is narrated by a distinguished old British gentleman — the
+browser's built-in **en-GB speechSynthesis voice** (pinned so it doesn't
+change accents between sessions), with **always-on subtitles**. That's the
+shipped voice: free, offline, no keys. The chiptune theme ducks under him
+while he speaks; the SND ON/OFF toggle in the topbar mutes everything.
+`js/narrator.js` carries a disabled ElevenLabs TTS seam as a possible
+future upgrade — nothing is wired to it.
 
-```js
-// js/keys.local.js  (create this file yourself; a 404 for it is harmless)
-window.ELEVENLABS_API_KEY = 'sk_...';   // British narrator voice (TTS)
-window.ANTHROPIC_API_KEY = 'sk-ant-...'; // live LLM triage + patient complaints
-```
-
-Without keys: narration falls back to the browser's built-in en-GB voice
-(subtitles always render), and diagnosis/complaints use the deterministic
-offline tables. See the AUDIO & NARRATION section for details.
+The only optional key is Anthropic, for live-LLM triage decisions and
+patient complaints (deterministic offline tables run otherwise): define
+`window.ANTHROPIC_API_KEY` before the game scripts load (see the comment
+block in `index.html`). Never commit keys.

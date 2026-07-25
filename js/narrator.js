@@ -2,15 +2,15 @@
  * Narrator — a distinguished old British gentleman talks the
  * player through the night. Nature-documentary gravitas, ER chaos.
  *
- * Same seam pattern as js/agentic.js — three tiers, degrade gracefully:
- *   1. ElevenLabs TTS  — needs a key (window.ELEVENLABS_API_KEY or
- *      the menu input, persisted to localStorage). Clips are cached
- *      by line id and calls are hard-capped per session.
- *   2. speechSynthesis — free/offline, best-effort en-GB male voice.
- *   3. Subtitle only   — the game is fully playable in silence.
- * Subtitles ALWAYS render, whichever tier speaks.
+ * Voice policy (by design, not fallback): the browser's built-in
+ * en-GB speechSynthesis voice, pinned so it never changes accents
+ * between sessions, with always-on subtitles. Free, offline, and
+ * reliably funny. An ElevenLabs TTS tier exists below as a disabled
+ * seam (NARRATOR_TTS_ENABLED) — a possible future upgrade; no key
+ * is wired anywhere.
  * ============================================================ */
 
+const NARRATOR_TTS_ENABLED = false;                   // ElevenLabs seam: off by design
 const ELEVENLABS_VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb';   // "George" — warm British premade
 const ELEVENLABS_MODEL = 'eleven_turbo_v2_5';
 const NARRATOR_MAX_TTS_CALLS = 30;                    // per-session bill guard
@@ -50,10 +50,11 @@ const narrator = {
 };
 
 function narratorKey() {
+  if (!NARRATOR_TTS_ENABLED) return null;
   if (typeof window.ELEVENLABS_API_KEY === 'string' && window.ELEVENLABS_API_KEY) {
     return window.ELEVENLABS_API_KEY;
   }
-  try { return localStorage.getItem('cbd_11labs_key') || null; } catch (_) { return null; }
+  return null;
 }
 
 function narratorReset() {
@@ -89,7 +90,8 @@ async function speakLine(line) {
   if (typeof isMuted === 'function' && isMuted()) return;   // subtitle already shown
   if (typeof duckMusic === 'function') duckMusic(true);
 
-  // Tier 1: ElevenLabs
+  // Disabled seam: ElevenLabs TTS (future upgrade; narratorKey()
+  // returns null while NARRATOR_TTS_ENABLED is false).
   const key = narratorKey();
   if (key) {
     try {

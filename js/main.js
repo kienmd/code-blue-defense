@@ -24,13 +24,6 @@ el.intro.addEventListener('click', () => {
   narrate('intro');
 });
 
-/* Narrator key input: persists to localStorage (see js/narrator.js). */
-const narratorKeyInput = document.getElementById('narrator-key');
-try { narratorKeyInput.value = localStorage.getItem('cbd_11labs_key') || ''; } catch (_) { /* ignore */ }
-narratorKeyInput.addEventListener('change', () => {
-  try { localStorage.setItem('cbd_11labs_key', narratorKeyInput.value.trim()); } catch (_) { /* ignore */ }
-});
-
 function refreshMuteButton() {
   el.btnMute.textContent = isMuted() ? 'SND OFF' : 'SND ON';
   el.btnMute.classList.toggle('off', isMuted());

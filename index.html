@@ -41,10 +41,6 @@
           Ten shifts. Nobody gets left in the waiting room.</p>
         <button id="btn-start" class="pxbtn primary">START SHIFT 1</button>
         <p id="menu-best" class="hint"></p>
-        <div id="narrator-setup">
-          <label class="hint" for="narrator-key">NARRATOR &middot; ELEVENLABS API KEY (OPTIONAL):</label>
-          <input id="narrator-key" type="password" placeholder="sk_… (blank = free browser voice)" autocomplete="off" />
-        </div>
         <p class="hint">
           BUILD rooms from the shop &mdash; they auto-place and the hospital grows &middot;
           HIRE staff and click a room to assign them (lobby staff diagnose) &middot;
@@ -108,18 +104,12 @@
   <div id="drag-ghost" class="hidden"></div>
 
   <!--
-    Optional live-API modes for hackathon demos (both degrade gracefully):
-    - window.ANTHROPIC_API_KEY: the Agentic Lab-Router + patient complaints
-      call Claude for real; otherwise a deterministic local fallback runs.
-    - window.ELEVENLABS_API_KEY: the British narrator speaks via ElevenLabs;
-      otherwise browser speechSynthesis (en-GB) or silent subtitles.
-      (Also settable from the menu's NARRATOR input, saved to localStorage.)
+    Optional live-LLM mode for hackathon demos (degrades gracefully):
+    define window.ANTHROPIC_API_KEY before game scripts load and the
+    Agentic Lab-Router + patient complaints call Claude for real;
+    otherwise a deterministic local fallback runs.
     <script>window.ANTHROPIC_API_KEY = "sk-ant-...";</script>
-    <script>window.ELEVENLABS_API_KEY = "sk_...";</script>
   -->
-  <!-- Local API keys (gitignored; a 404 here is fine — the game runs
-       without keys). See .gitignore + README "Audio & narration". -->
-  <script src="js/keys.local.js"></script>
   <!-- Plain scripts, shared global scope, load order matters:
        data (constants/agentic/levels/entities) -> audio/narrator ->
        state -> ui -> sim -> input -> render -> main (boot). -->
