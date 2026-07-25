@@ -1,9 +1,10 @@
 /* ============================================================
- * Code Blue Defense: Agentic Triage — engine + UI
+ * Code Blue Defense: Ward Shift — engine + UI
  *
- * Rigid requestAnimationFrame loop -> update(dt) + render().
- * Patients follow hardcoded checkpoint paths (levels.js).
- * Tower range = circular bounding check (Math.hypot vs range).
+ * Fallout Shelter-style cross-section. requestAnimationFrame ->
+ * update(dt) + render(). The core verb is ALLOCATION: click a
+ * patient, click a room. Treatment happens in beds; the ailment
+ * sprite takes the treatment, never the patient (DESIGN.md).
  * ============================================================ */
 
 (() => {
@@ -12,24 +13,27 @@
   /* ---------- DOM ---------- */
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
+  canvas.width = CANVAS_W;
+  canvas.height = CANVAS_H;
   ctx.imageSmoothingEnabled = false;
 
   const el = {
     budget: document.getElementById('hud-budget'),
     lives: document.getElementById('hud-lives'),
-    wave: document.getElementById('hud-wave'),
-    rooms: document.getElementById('hud-rooms'),
-    levelSelect: document.getElementById('level-select'),
-    levelCards: document.getElementById('level-cards'),
+    shift: document.getElementById('hud-shift'),
+    waiting: document.getElementById('hud-waiting'),
+    menu: document.getElementById('menu'),
+    menuBest: document.getElementById('menu-best'),
+    btnStart: document.getElementById('btn-start'),
     result: document.getElementById('result'),
     resultTitle: document.getElementById('result-title'),
     resultStars: document.getElementById('result-stars'),
     resultDetail: document.getElementById('result-detail'),
     btnRetry: document.getElementById('btn-retry'),
-    btnNext: document.getElementById('btn-next'),
     btnMenu: document.getElementById('btn-menu'),
     banner: document.getElementById('banner'),
-    shopTowers: document.getElementById('shop-towers'),
+    shopRooms: document.getElementById('shop-rooms'),
+    shopStaff: document.getElementById('shop-staff'),
     shopUpgrades: document.getElementById('shop-upgrades'),
     tooltip: document.getElementById('tooltip'),
     dragGhost: document.getElementById('drag-ghost'),
@@ -54,154 +58,251 @@
     osc.start(t0); osc.stop(t0 + dur + 0.02);
   }
   const SFX = {
-    treat:     () => tone(520, 0.05, 'square', 0.02),
-    discharge: () => { tone(660, 0.08); tone(880, 0.1, 'square', 0.035, 0.08); },
-    crash:     () => { tone(220, 0.25, 'sawtooth', 0.06); tone(140, 0.4, 'sawtooth', 0.06, 0.2); },
-    leak:      () => { tone(300, 0.2, 'triangle', 0.05); tone(200, 0.3, 'triangle', 0.05, 0.15); },
+    discharge: () => { tone(660, 0.08); tone(880, 0.1, 'square', 0.035, 0.08); tone(1180, 0.14, 'square', 0.03, 0.18); },
+    transfer:  () => { tone(680, 0.22, 'square', 0.05); tone(510, 0.22, 'square', 0.05, 0.24); tone(680, 0.3, 'square', 0.05, 0.48); },
     place:     () => tone(440, 0.07),
     buy:       () => { tone(590, 0.06); tone(790, 0.08, 'square', 0.035, 0.06); },
     burnout:   () => tone(110, 0.5, 'sawtooth', 0.05),
     siren:     () => { tone(680, 0.22, 'square', 0.045); tone(510, 0.22, 'square', 0.045, 0.24); tone(680, 0.22, 'square', 0.045, 0.48); },
     beep:      () => tone(880, 0.05, 'sine', 0.03),
+    diagnose:  () => { tone(740, 0.05, 'sine', 0.03); tone(990, 0.07, 'sine', 0.03, 0.05); },
     denied:    () => tone(160, 0.12, 'square', 0.04),
+    select:    () => tone(520, 0.04, 'sine', 0.025),
+    assign:    () => { tone(520, 0.05); tone(700, 0.06, 'square', 0.03, 0.05); },
   };
 
   /* ---------- Game state ---------- */
   const G = {
     state: 'menu',            // 'menu' | 'playing' | 'won' | 'lost'
-    levelIdx: 0,
-    level: null,
     time: 0,
     budget: 0,
     lives: 0,
-    roomsUsed: 0,
     discharged: 0,
-    towers: [],
+    transfers: 0,
+    rooms: [],
+    staffList: [],
     patients: [],
-    beams: [],
-    texts: [],
-    pathPx: [],               // checkpoints in pixel coords
-    pathTiles: new Set(),     // "x,y" strings
-    occupied: new Set(),
+    waitSpots: new Array(WAIT_SPOTS).fill(null),   // Patient refs
     upgrades: { labRouter: false, priorAuth: false },
-    // wave engine
-    waveIdx: -1,
-    phase: 'prep',            // 'prep' | 'wave'
+    // shift engine
+    shiftIdx: -1,
+    phase: 'prep',
     prepTimer: 0,
-    waveElapsed: 0,
-    schedule: [],             // [{t, type}] sorted asc
+    shiftElapsed: 0,
+    schedule: [],
     // input
-    placing: null,            // tower typeKey being placed
-    dragUpgrade: null,        // upgrade key being dragged
-    hoverTile: null,
+    selection: null,          // {kind:'patient'|'staff', obj}
+    buildType: null,
+    hover: null,              // {x,y} canvas coords
+    dragUpgrade: null,
+    autoAssignTimer: 0,
     heartbeatTimer: 0,
+    texts: [],
+    particles: [],
     sfx(name) { (SFX[name] || (() => {}))(); },
-    addText(x, y, text, color, life = 1.2) {
-      this.texts.push({ x, y, text, color, t: 0, life });
-    },
+    addText(x, y, text, color, life = 1.3) { this.texts.push({ x, y, text, color, t: 0, life }); },
   };
 
-  /* ---------- Stars persistence ---------- */
-  function getStars() {
-    try { return JSON.parse(localStorage.getItem('cbd_stars') || '[0,0,0]'); }
-    catch (_) { return [0, 0, 0]; }
+  function lobbyStaff() { return G.staffList.filter(s => s.room === 'lobby'); }
+  function breakroomCount() { return Math.min(BREAKROOM_CAP, G.rooms.filter(r => r.typeKey === 'breakroom').length); }
+  function waitingPatients() { return G.patients.filter(p => p.state === 'waiting'); }
+
+  /* ---------- Best-run persistence ---------- */
+  function getBest() {
+    try { return JSON.parse(localStorage.getItem('cbd_ws_best') || 'null'); } catch (_) { return null; }
   }
-  function setStars(idx, stars) {
-    const s = getStars();
-    s[idx] = Math.max(s[idx] || 0, stars);
-    localStorage.setItem('cbd_stars', JSON.stringify(s));
-  }
-
-  /* ---------- Level lifecycle ---------- */
-  function loadLevel(idx) {
-    const lv = LEVELS[idx];
-    G.levelIdx = idx;
-    G.level = lv;
-    G.time = 0;
-    G.budget = lv.startBudget;
-    G.lives = START_LIVES;
-    G.roomsUsed = 0;
-    G.discharged = 0;
-    G.towers = [];
-    G.patients = [];
-    G.beams = [];
-    G.texts = [];
-    G.upgrades = { labRouter: false, priorAuth: false };
-    G.waveIdx = -1;
-    G.phase = 'prep';
-    G.prepTimer = 6;
-    G.schedule = [];
-    G.placing = null;
-    G.dragUpgrade = null;
-
-    canvas.width = lv.gridW * TILE;
-    canvas.height = lv.gridH * TILE;
-    ctx.imageSmoothingEnabled = false;
-
-    // Path checkpoints -> pixel centers + path tile set (fill tiles between checkpoints)
-    G.pathPx = lv.path.map(([tx, ty]) => ({ x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE }));
-    G.pathTiles = new Set();
-    for (let i = 0; i < lv.path.length - 1; i++) {
-      let [x0, y0] = lv.path[i];
-      const [x1, y1] = lv.path[i + 1];
-      const sx = Math.sign(x1 - x0), sy = Math.sign(y1 - y0);
-      G.pathTiles.add(`${x0},${y0}`);
-      while (x0 !== x1 || y0 !== y1) {
-        x0 += sx; y0 += sy;
-        G.pathTiles.add(`${x0},${y0}`);
-      }
+  function setBest(stars, discharged) {
+    const b = getBest();
+    if (!b || stars > b.stars || (stars === b.stars && discharged > b.discharged)) {
+      localStorage.setItem('cbd_ws_best', JSON.stringify({ stars, discharged }));
     }
-    G.occupied = new Set();
+  }
 
-    el.levelSelect.classList.add('hidden');
-    el.result.classList.add('hidden');
+  /* ---------- Run lifecycle ---------- */
+  function startRun() {
     G.state = 'playing';
-    showBanner(`LEVEL ${lv.id}: ${lv.name}<br/>FIRST PATIENTS EN ROUTE`, 'info', 2.6);
+    G.time = 0;
+    G.budget = START_BUDGET;
+    G.lives = START_LIVES;
+    G.discharged = 0;
+    G.transfers = 0;
+    G.rooms = [];
+    G.staffList = [];
+    G.patients = [];
+    G.waitSpots = new Array(WAIT_SPOTS).fill(null);
+    G.upgrades = { labRouter: false, priorAuth: false };
+    G.shiftIdx = -1;
+    G.phase = 'prep';
+    G.prepTimer = 14;                 // generous first prep: build + hire
+    G.schedule = [];
+    G.selection = null;
+    G.buildType = null;
+    G.texts = [];
+    G.particles = [];
+    el.menu.classList.add('hidden');
+    el.result.classList.add('hidden');
+    showBanner('BUILD A WARD + HIRE A NURSE<br/>FIRST PATIENTS INBOUND', 'info', 4);
     refreshShop();
   }
 
-  const entrancePx = () => G.pathPx[0];
-  const exitPx = () => G.pathPx[G.pathPx.length - 1];
-
-  /* ---------- Wave engine ---------- */
-  function startNextWave() {
-    G.waveIdx++;
-    const wave = G.level.waves[G.waveIdx];
-    G.phase = 'wave';
-    G.waveElapsed = 0;
-    // Interleave entries: each entry schedules on its own interval with a
-    // small phase offset so mixed waves arrive shuffled, not batched.
+  function startShift() {
+    G.shiftIdx++;
+    const shift = SHIFTS[G.shiftIdx];
+    G.phase = 'shift';
+    G.shiftElapsed = 0;
     G.schedule = [];
-    wave.entries.forEach((entry, ei) => {
+    shift.entries.forEach((entry, ei) => {
       for (let i = 0; i < entry.count; i++) {
-        G.schedule.push({ t: 0.6 + ei * 0.9 + i * entry.interval, type: entry.type });
+        G.schedule.push({ t: 1 + ei * 1.7 + i * entry.interval, type: entry.type });
       }
     });
     G.schedule.sort((a, b) => a.t - b.t);
-    if (wave.banner) {
-      showBanner(wave.banner, 'alert', 3);
-      G.sfx('siren');
-    } else {
-      showBanner(`WAVE ${G.waveIdx + 1} / ${G.level.waves.length}`, 'info', 1.6);
+    if (shift.banner) { showBanner(shift.banner, 'alert', 3); G.sfx('siren'); }
+    else showBanner(`SHIFT ${G.shiftIdx + 1} / ${SHIFTS.length}`, 'info', 1.6);
+  }
+
+  function endRun(won) {
+    G.state = won ? 'won' : 'lost';
+    G.selection = null;
+    G.buildType = null;
+    let stars = 0;
+    if (won) {
+      stars = G.transfers === 0 ? 3 : (G.transfers <= 2 ? 2 : 1);
+      setBest(stars, G.discharged);
+    }
+    el.resultTitle.textContent = won ? 'ALL SHIFTS COMPLETE' : 'ICU AT CAPACITY';
+    el.resultTitle.style.color = won ? 'var(--green)' : 'var(--red)';
+    el.resultStars.textContent = won ? '\u2605'.repeat(stars) + '\u2606'.repeat(3 - stars) : '';
+    el.resultDetail.innerHTML =
+      `PATIENTS HELPED: ${G.discharged}<br/>` +
+      `ICU TRANSFERS: ${G.transfers}<br/>` +
+      `FINAL BUDGET: $${G.budget}`;
+    el.result.classList.remove('hidden');
+    if (won) { SFX.discharge(); setTimeout(SFX.buy, 200); } else { SFX.transfer(); }
+  }
+
+  /* ---------- Spawning + allocation ---------- */
+  function spawnPatient(type) {
+    const p = new Patient(type);
+    let spot = G.waitSpots.indexOf(null);
+    if (spot === -1) spot = WAIT_SPOTS - 1;      // overflow: crowd the last spot
+    else G.waitSpots[spot] = p;
+    p.waitIndex = spot;
+    p.path = [{ x: waitSpotX(spot), y: floorWalkY(0) }];
+    G.patients.push(p);
+
+    // AGENTIC LAB-ROUTER: instant AI diagnosis on arrival.
+    if (G.upgrades.labRouter) {
+      simulateAgenticDecision(p).then(decision => {
+        if (p.outcome || p.diagnosed) return;
+        p.diagnosed = true;
+        p.aiTag = decision;
+        G.addText(p.x, p.y - 34, `AI P${decision.priority}: ${decision.category}`, PALETTE.toxic, 1.8);
+        G.sfx('diagnose');
+      });
     }
   }
 
-  function spawnPatient(type) {
-    const p = new Patient(type, G.pathPx);
-    G.patients.push(p);
-    // AGENTIC LAB-ROUTER: intercept at the entrance. The async LLM (or
-    // fallback) decision resolves shortly after spawn; the mechanical
-    // effect is a flat 30% complexity shred (see js/agentic.js header).
-    if (G.upgrades.labRouter) {
-      simulateAgenticDecision(p).then(decision => {
-        if (p.outcome) return;
-        const shred = p.complexity * UPGRADE_TYPES.labRouter.complexityShred;
-        p.complexity -= shred;
-        p.aiTag = decision;
-        G.addText(p.x, p.y - 22, `AI P${decision.priority}: ${decision.category}`, PALETTE.toxic, 1.6);
-        G.addText(p.x, p.y - 10, `-${Math.round(shred)} COMPLEXITY`, PALETTE.blue, 1.4);
-      });
+  function freeWaitSpot(p) {
+    if (p.waitIndex >= 0 && G.waitSpots[p.waitIndex] === p) G.waitSpots[p.waitIndex] = null;
+    p.waitIndex = -1;
+  }
+
+  function currentFloorOf(ent) {
+    return Math.max(0, Math.min(NUM_FLOORS - 1, Math.round((GROUND_Y - 8 - ent.y) / FLOOR_H)));
+  }
+
+  function pathFrom(ent, toX, toFloor) {
+    if (Math.abs(ent.x - ELEV_CX) < 1) {
+      return [{ x: ELEV_CX, y: floorWalkY(toFloor) }, { x: toX, y: floorWalkY(toFloor) }];
     }
+    return buildPath(ent.x, currentFloorOf(ent), toX, toFloor);
+  }
+
+  function assignPatientToRoom(p, room) {
+    const bed = room.freeBed();
+    if (bed === -1) { G.sfx('denied'); G.addText(p.x, p.y - 30, 'NO FREE BED', PALETTE.amber, 1); return false; }
+    freeWaitSpot(p);
+    room.beds[bed] = p;
+    p.room = room;
+    p.bedIndex = bed;
+    p.state = 'walking';
+    const pos = room.bedPos(bed);
+    p.path = pathFrom(p, pos.x, room.floor);
+    G.sfx('assign');
+    return true;
+  }
+
+  function assignStaff(staff, dest) {
+    // Remove from current post
+    if (staff.room instanceof Room) {
+      staff.room.staff = staff.room.staff.filter(s => s !== staff);
+    }
+    staff.diagPatient = null;
+    staff.diagT = 0;
+
+    if (dest === 'lobby') {
+      if (lobbyStaff().length >= 3) { G.sfx('denied'); return false; }
+      staff.room = 'lobby';
+      staff.state = 'walking';
+      const idx = lobbyStaff().length - 1;     // position by arrival order
+      staff.path = pathFrom(staff, 170 + Math.min(2, idx) * 120, 0);
+    } else {
+      if (!dest.hasStaffSpace() || dest.def.support) { G.sfx('denied'); return false; }
+      dest.staff.push(staff);
+      staff.room = dest;
+      staff.state = 'walking';
+      const pos = dest.staffPos(dest.staff.length - 1);
+      staff.path = pathFrom(staff, pos.x, dest.floor);
+    }
+    G.sfx('assign');
+    return true;
+  }
+
+  function hireStaff(typeKey) {
+    const def = STAFF_TYPES[typeKey];
+    if (G.budget < def.cost) { G.sfx('denied'); return; }
+    G.budget -= def.cost;
+    const s = new Staff(typeKey);
+    s.x = -20; s.y = floorWalkY(0);
+    s.state = 'walking';
+    s.path = [{ x: 830 - (G.staffList.length % 4) * 26, y: floorWalkY(0) }];
+    G.staffList.push(s);
+    G.selection = { kind: 'staff', obj: s };
+    G.addText(200, floorWalkY(0) - 40, `${def.name.toUpperCase()} HIRED — CLICK A ROOM`, PALETTE.blue, 2);
+    G.sfx('buy');
+    refreshShop();
+  }
+
+  function buildRoom(typeKey, floor, slot) {
+    const def = ROOM_TYPES[typeKey];
+    if (G.budget < def.cost) { G.sfx('denied'); return; }
+    G.budget -= def.cost;
+    const r = new Room(typeKey, floor, slot);
+    G.rooms.push(r);
+    G.addText(r.x + r.w / 2, r.y + 30, `${def.name.toUpperCase()} BUILT`, def.color, 1.6);
+    G.sfx('place');
+    refreshShop();
+  }
+
+  function roomAt(floor, slot) {
+    return G.rooms.find(r => r.floor === floor && r.slot === slot) || null;
+  }
+
+  function slotFromPoint(px, py) {
+    if (px < SLOT_X0 || px >= SLOT_X0 + SLOTS_PER_FLOOR * SLOT_W) return null;
+    const floor = Math.floor((GROUND_Y - py) / FLOOR_H);
+    if (floor < 1 || floor >= NUM_FLOORS) return null;
+    const slot = Math.floor((px - SLOT_X0) / SLOT_W);
+    return { floor, slot };
+  }
+
+  function inLobby(px, py) {
+    return py > floorTopY(0) && py <= GROUND_Y && px > ELEV_X;
+  }
+
+  function inEntrance(px, py) {
+    return py > floorTopY(0) && py <= GROUND_Y && px <= ELEV_X;
   }
 
   /* ---------- Update ---------- */
@@ -209,83 +310,234 @@
     if (G.state !== 'playing') return;
     G.time += dt;
 
-    // Wave phases
+    // Shift phases
     if (G.phase === 'prep') {
       G.prepTimer -= dt;
-      if (G.prepTimer <= 0) startNextWave();
+      if (G.prepTimer <= 0) startShift();
     } else {
-      G.waveElapsed += dt;
-      while (G.schedule.length && G.schedule[0].t <= G.waveElapsed) {
+      G.shiftElapsed += dt;
+      while (G.schedule.length && G.schedule[0].t <= G.shiftElapsed) {
         spawnPatient(G.schedule.shift().type);
       }
       if (!G.schedule.length && G.patients.length === 0) {
-        if (G.waveIdx >= G.level.waves.length - 1) { endLevel(true); return; }
+        if (G.shiftIdx >= SHIFTS.length - 1) { endRun(true); return; }
         G.phase = 'prep';
-        G.prepTimer = 5;
-        showBanner(`WAVE ${G.waveIdx + 1} CLEARED`, 'info', 1.5);
+        G.prepTimer = PREP_SECONDS;
+        showBanner(`SHIFT ${G.shiftIdx + 1} COMPLETE`, 'info', 1.6);
       }
     }
 
-    // Reset per-frame patient modifiers, then let towers act, then move.
-    for (const p of G.patients) p.slowMult = 1;
-    for (const t of G.towers) t.update(G, dt);
-    for (const p of G.patients) p.update(dt);
+    updatePatients(dt);
+    updateStaff(dt);
+    updateRooms(dt);
+    updateContagion(dt);
+    updateAutoAssign(dt);
 
-    // Resolve outcomes
-    for (const p of G.patients) {
-      if (!p.outcome) continue;
-      if (p.outcome === 'discharged') {
-        // PRIOR-AUTH AGENT math: base payout x1.25 when installed.
-        const mult = G.upgrades.priorAuth ? UPGRADE_TYPES.priorAuth.payoutMult : 1;
-        const pay = Math.round(p.def.payout * mult);
-        G.budget += pay;
-        G.discharged++;
-        G.addText(p.x, p.y - 14, `DISCHARGED +$${pay}`, PALETTE.green, 1.4);
-        G.sfx('discharge');
-      } else if (p.outcome === 'crashed') {
-        G.lives--;
-        G.addText(p.x, p.y - 14, 'CODE BLUE! PATIENT CRASHED', PALETTE.red, 2);
-        G.sfx('crash');
-      } else if (p.outcome === 'leaked') {
-        G.lives--;
-        G.addText(p.x, p.y - 14, 'ICU LEAK!', PALETTE.red, 2);
-        G.sfx('leak');
-      }
-    }
-    G.patients = G.patients.filter(p => !p.outcome);
-    if (G.lives <= 0) { endLevel(false); return; }
+    if (G.lives <= 0 && G.state === 'playing') { endRun(false); return; }
 
-    // Low-lives heart monitor
+    // Low-capacity heart monitor
     if (G.lives <= 2) {
       G.heartbeatTimer -= dt;
       if (G.heartbeatTimer <= 0) { G.sfx('beep'); G.heartbeatTimer = 1.1; }
     }
 
-    // FX decay
-    for (const b of G.beams) b.t -= dt;
-    G.beams = G.beams.filter(b => b.t > 0);
     for (const t of G.texts) t.t += dt;
     G.texts = G.texts.filter(t => t.t < t.life);
+    for (const pt of G.particles) {
+      pt.t += dt;
+      pt.x += pt.vx * dt;
+      pt.y += pt.vy * dt;
+      if (pt.grav) pt.vy += 160 * dt;
+    }
+    G.particles = G.particles.filter(pt => pt.t < pt.life);
   }
 
-  function endLevel(won) {
-    G.state = won ? 'won' : 'lost';
-    G.placing = null;
-    let stars = 0;
-    if (won) {
-      stars = G.lives >= START_LIVES ? 3 : (G.lives >= 3 ? 2 : 1);
-      setStars(G.levelIdx, stars);
+  function updatePatients(dt) {
+    for (const p of G.patients) {
+      if (p.state === 'transfer') {
+        p.transferT -= dt;
+        if (p.transferT <= 0) p.outcome = 'transferred';
+        continue;
+      }
+      if (p.state === 'arriving' || p.state === 'walking') {
+        if (moveAlongPath(p, dt)) {
+          if (p.state === 'arriving') p.state = 'waiting';
+          else {
+            p.state = 'inBed';
+            const pos = p.room.bedPos(p.bedIndex);
+            p.x = pos.x; p.y = pos.y - 4;
+          }
+        }
+      } else if (p.state === 'exiting') {
+        if (moveAlongPath(p, dt)) p.outcome = 'walked_out';
+        continue;                                    // cured: no decay
+      }
+
+      // Deterioration: the ailment's clock, always ticking.
+      p.health -= p.def.decay * p.decayMult() * dt;
+
+      if (p.complexity <= 0 && p.state === 'inBed') dischargePatient(p);
+      else if (p.health <= 0) transferPatient(p);
     }
-    el.resultTitle.textContent = won ? 'SHIFT COMPLETE' : 'HOSPITAL OVERRUN';
-    el.resultTitle.style.color = won ? 'var(--green)' : 'var(--red)';
-    el.resultStars.textContent = won ? '\u2605'.repeat(stars) + '\u2606'.repeat(3 - stars) : '';
-    el.resultDetail.innerHTML =
-      `PATIENTS DISCHARGED: ${G.discharged}<br/>` +
-      `LIVES REMAINING: ${Math.max(0, G.lives)} / ${START_LIVES}<br/>` +
-      `FINAL BUDGET: $${G.budget}`;
-    el.btnNext.classList.toggle('hidden', !(won && G.levelIdx < LEVELS.length - 1));
-    el.result.classList.remove('hidden');
-    if (won) { SFX.discharge(); setTimeout(SFX.buy, 180); } else { SFX.crash(); }
+
+    // Resolve outcomes
+    for (const p of G.patients) {
+      if (p.outcome === 'transferred') {
+        G.lives--;
+        G.transfers++;
+      } else if (p.outcome === 'walked_out') {
+        G.discharged++;
+      }
+    }
+    G.patients = G.patients.filter(p => !p.outcome);
+  }
+
+  function dischargePatient(p) {
+    // The germ pops; the patient celebrates and walks out. THE win moment.
+    const mult = G.upgrades.priorAuth ? UPGRADE_TYPES.priorAuth.payoutMult : 1;
+    const pay = Math.round(p.def.payout * mult);
+    G.budget += pay;
+    if (p.room) { p.room.beds[p.bedIndex] = null; p.room = null; p.bedIndex = -1; }
+    p.state = 'exiting';
+    p.complexity = 0;
+    p.path = pathFrom(p, -30, 0);
+    G.addText(p.x, p.y - 34, `CURED! +$${pay}`, PALETTE.green, 1.6);
+    burstConfetti(p.x, p.y - 20);
+    G.sfx('discharge');
+    refreshShop();
+  }
+
+  function transferPatient(p) {
+    // Deterioration won: stretcher team rushes them to the ICU.
+    // Sad, not violent — red flash + siren, no explosion.
+    if (p.room) { p.room.beds[p.bedIndex] = null; p.room = null; p.bedIndex = -1; }
+    freeWaitSpot(p);
+    if (G.selection && G.selection.obj === p) G.selection = null;
+    p.state = 'transfer';
+    p.transferT = 1.4;
+    G.addText(p.x, p.y - 34, 'ICU TRANSFER', PALETTE.brightRed, 2);
+    G.sfx('transfer');
+  }
+
+  function updateStaff(dt) {
+    const brRegen = breakroomCount() * BREAKROOM_REGEN;
+    for (const s of G.staffList) {
+      if (s.state === 'walking') {
+        if (moveAlongPath(s, dt)) s.state = 'working';
+        continue;
+      }
+      if (s.isBurnedOut(G.time)) continue;
+
+      let working = false;
+      if (s.room === 'lobby') {
+        // Triage: diagnose the longest-waiting undiagnosed patient.
+        if (!s.diagPatient || s.diagPatient.outcome || s.diagPatient.state !== 'waiting' || s.diagPatient.diagnosed) {
+          s.diagPatient = waitingPatients().find(p =>
+            !p.diagnosed && !G.staffList.some(o => o !== s && o.diagPatient === p)) || null;
+          s.diagT = 0;
+        }
+        if (s.diagPatient) {
+          working = true;
+          s.diagT += dt;
+          if (s.diagT >= s.def.diagSeconds) {
+            const p = s.diagPatient;
+            p.diagnosed = true;
+            G.addText(p.x, p.y - 34, `DIAGNOSED: ${p.def.name.toUpperCase()}`, PALETTE.blue, 1.6);
+            G.sfx('diagnose');
+            s.diagPatient = null;
+            s.diagT = 0;
+          }
+        }
+      } else if (s.room instanceof Room) {
+        working = s.room.beds.some(b => b && b.state === 'inBed');
+      }
+
+      if (working) {
+        s.stress = Math.min(100, s.stress + s.stressGain() * dt);
+        if (s.stress >= 100) {
+          s.burnoutUntil = G.time + BURNOUT_SECONDS;
+          s.stress = 0;
+          s.diagPatient = null;
+          G.addText(s.x, s.y - 36, 'BURNOUT!', PALETTE.red, 1.6);
+          G.sfx('burnout');
+        }
+      } else {
+        s.stress = Math.max(0, s.stress - (STRESS_IDLE_REGEN + brRegen) * dt);
+      }
+    }
+  }
+
+  function updateRooms(dt) {
+    for (const r of G.rooms) {
+      if (r.def.support) continue;
+      const occupied = r.beds.filter(b => b && b.state === 'inBed');
+      if (!occupied.length) continue;
+      const staffRate = r.staff
+        .filter(s => s.state === 'working' && !s.isBurnedOut(G.time))
+        .reduce((sum, s) => sum + s.rate(), 0);
+      const perBed = (ROOM_BASE_RATE + staffRate) / occupied.length;
+      for (const p of occupied) {
+        let mult = 1;
+        if (!p.diagnosed) mult = UNDIAGNOSED_MULT;
+        else if (!r.treats(p.typeKey)) mult = WRONG_ROOM_MULT;
+        p.complexity -= perBed * mult * dt;
+        // healing plus-particles — treatment aimed at the ailment
+        if (Math.random() < dt * 3) {
+          G.particles.push({
+            x: p.x + (Math.random() * 16 - 8), y: p.y - 26,
+            vx: 0, vy: -14, t: 0, life: 0.8,
+            color: mult >= 1 ? PALETTE.green : PALETTE.amber, kind: 'plus',
+          });
+        }
+      }
+    }
+  }
+
+  function updateContagion(dt) {
+    // Airborne spores make the WAITING ROOM dangerous — isolate them fast.
+    for (const p of G.patients) {
+      if (p.typeKey !== 'spore' || p.state === 'inBed' || p.state === 'exiting' || p.state === 'transfer') continue;
+      p.sporeTimer -= dt;
+      if (p.sporeTimer <= 0) {
+        p.sporeTimer = SPORE_PULSE;
+        for (const other of waitingPatients()) {
+          if (other === p) continue;
+          other.health -= SPORE_DMG;
+          G.particles.push({ x: other.x, y: other.y - 20, vx: 0, vy: -8, t: 0, life: 0.7, color: PALETTE.spore, kind: 'puff' });
+        }
+        G.particles.push({ x: p.x, y: p.y - 24, vx: 0, vy: -12, t: 0, life: 1, color: PALETTE.spore, kind: 'puff' });
+        if (waitingPatients().length > 1) G.addText(p.x, p.y - 40, 'SPREADING!', PALETTE.spore, 1);
+      }
+    }
+  }
+
+  function updateAutoAssign(dt) {
+    if (!G.upgrades.labRouter) return;
+    G.autoAssignTimer -= dt;
+    if (G.autoAssignTimer > 0) return;
+    G.autoAssignTimer = AUTO_ASSIGN_PERIOD;
+    for (const p of waitingPatients()) {
+      if (!p.diagnosed) continue;
+      const room = G.rooms.find(r => r.treats(p.typeKey) && r.freeBed() !== -1);
+      if (room) {
+        assignPatientToRoom(p, room);
+        G.addText(p.x, p.y - 30, 'AI ROUTED', PALETTE.toxic, 1);
+        break;                                    // one per tick: visible, not teleporty
+      }
+    }
+  }
+
+  function burstConfetti(x, y) {
+    for (let i = 0; i < 14; i++) {
+      G.particles.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 120,
+        vy: -40 - Math.random() * 80,
+        t: 0, life: 0.9 + Math.random() * 0.4, grav: true,
+        color: [PALETTE.green, PALETTE.blue, PALETTE.amber, PALETTE.white][i % 4],
+        kind: 'confetti',
+      });
+    }
   }
 
   /* ---------- Banner ---------- */
@@ -298,75 +550,6 @@
     bannerTimeout = setTimeout(() => el.banner.classList.add('hidden'), seconds * 1000);
   }
 
-  /* ---------- Placement ---------- */
-  function placementValid(typeKey, tx, ty) {
-    const def = TOWER_TYPES[typeKey];
-    if (G.budget < def.cost) return false;
-    if (G.roomsUsed + def.rooms > G.level.maxRooms) return false;
-    let adjacent = false;
-    for (let dx = 0; dx < def.footprint; dx++) {
-      for (let dy = 0; dy < def.footprint; dy++) {
-        const x = tx + dx, y = ty + dy;
-        if (x < 0 || y < 0 || x >= G.level.gridW || y >= G.level.gridH) return false;
-        if (G.pathTiles.has(`${x},${y}`) || G.occupied.has(`${x},${y}`)) return false;
-        for (const [ax, ay] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
-          if (G.pathTiles.has(`${ax},${ay}`)) adjacent = true;
-        }
-      }
-    }
-    return adjacent; // staff must sit beside the corridor to reach patients
-  }
-
-  function placeTower(typeKey, tx, ty) {
-    const def = TOWER_TYPES[typeKey];
-    const t = new Tower(typeKey, tx, ty);
-    for (const [x, y] of t.tiles()) G.occupied.add(`${x},${y}`);
-    G.towers.push(t);
-    G.budget -= def.cost;
-    G.roomsUsed += def.rooms;
-    G.addText(t.cx, t.cy - 22, `${def.name.toUpperCase()} ON DUTY`, PALETTE.blue, 1.4);
-    G.sfx('place');
-    refreshShop();
-  }
-
-  /* ---------- Upgrade drop resolution ---------- */
-  function towerAt(px, py) {
-    for (const t of G.towers) {
-      const f = t.def.footprint * TILE;
-      if (px >= t.tx * TILE && px < t.tx * TILE + f && py >= t.ty * TILE && py < t.ty * TILE + f) return t;
-    }
-    return null;
-  }
-
-  function dropUpgrade(key, px, py) {
-    const def = UPGRADE_TYPES[key];
-    if (G.budget < def.cost) { G.sfx('denied'); return; }
-    if (def.target === 'doctor') {
-      const t = towerAt(px, py);
-      if (!t || t.def.kind !== 'attack') { G.addText(px, py, 'ATTACH TO A DOCTOR', PALETTE.amber, 1.2); G.sfx('denied'); return; }
-      if (t.scribe) { G.addText(px, py, 'ALREADY HAS A SCRIBE', PALETTE.amber, 1.2); G.sfx('denied'); return; }
-      t.scribe = true;
-      G.budget -= def.cost;
-      G.addText(t.cx, t.cy - 26, 'AI SCRIBE ONLINE', PALETTE.toxic, 1.5);
-    } else if (def.target === 'entrance') {
-      if (G.upgrades.labRouter) { G.sfx('denied'); return; }
-      const e = entrancePx();
-      if (Math.hypot(px - e.x, py - e.y) > 2.2 * TILE) { G.addText(px, py, 'DROP ON THE ENTRANCE', PALETTE.amber, 1.2); G.sfx('denied'); return; }
-      G.upgrades.labRouter = true;
-      G.budget -= def.cost;
-      G.addText(e.x, e.y - 26, 'LAB-ROUTER ONLINE', PALETTE.toxic, 1.5);
-    } else if (def.target === 'exit') {
-      if (G.upgrades.priorAuth) { G.sfx('denied'); return; }
-      const x = exitPx();
-      if (Math.hypot(px - x.x, py - x.y) > 2.2 * TILE) { G.addText(px, py, 'DROP ON THE ICU GATE', PALETTE.amber, 1.2); G.sfx('denied'); return; }
-      G.upgrades.priorAuth = true;
-      G.budget -= def.cost;
-      G.addText(x.x, x.y - 26, 'PRIOR-AUTH AGENT ONLINE', PALETTE.toxic, 1.5);
-    }
-    G.sfx('buy');
-    refreshShop();
-  }
-
   /* ---------- Input ---------- */
   function canvasPos(evt) {
     const rect = canvas.getBoundingClientRect();
@@ -376,29 +559,101 @@
     };
   }
 
-  canvas.addEventListener('mousemove', evt => {
-    const p = canvasPos(evt);
-    G.hoverTile = { tx: Math.floor(p.x / TILE), ty: Math.floor(p.y / TILE) };
-  });
-  canvas.addEventListener('mouseleave', () => { G.hoverTile = null; });
+  function hitPatient(px, py) {
+    for (const p of G.patients) {
+      if (p.state === 'transfer' || p.state === 'exiting') continue;
+      if (Math.abs(px - p.x) < 12 && py > p.y - 34 && py < p.y + 4) return p;
+    }
+    return null;
+  }
+
+  function hitStaff(px, py) {
+    for (const s of G.staffList) {
+      if (Math.abs(px - s.x) < 12 && py > s.y - 30 && py < s.y + 4) return s;
+    }
+    return null;
+  }
+
+  function hitRoom(px, py) {
+    return G.rooms.find(r => r.contains(px, py)) || null;
+  }
+
+  canvas.addEventListener('mousemove', evt => { G.hover = canvasPos(evt); });
+  canvas.addEventListener('mouseleave', () => { G.hover = null; });
 
   canvas.addEventListener('click', evt => {
     ensureAudio();
-    if (G.state !== 'playing' || !G.placing) return;
-    const p = canvasPos(evt);
-    const tx = Math.floor(p.x / TILE), ty = Math.floor(p.y / TILE);
-    if (placementValid(G.placing, tx, ty)) {
-      placeTower(G.placing, tx, ty);
-      if (G.budget < TOWER_TYPES[G.placing]?.cost) G.placing = null;
-      refreshShop();
-    } else {
-      G.sfx('denied');
+    if (G.state !== 'playing') return;
+    const { x, y } = canvasPos(evt);
+
+    // 1. Build mode
+    if (G.buildType) {
+      const slot = slotFromPoint(x, y);
+      if (slot && !roomAt(slot.floor, slot.slot)) {
+        buildRoom(G.buildType, slot.floor, slot.slot);
+        if (G.budget < ROOM_TYPES[G.buildType].cost) G.buildType = null;
+        refreshShop();
+      } else G.sfx('denied');
+      return;
     }
+
+    // 2. Selection-driven assignment
+    if (G.selection) {
+      const { kind, obj } = G.selection;
+      const room = hitRoom(x, y);
+      if (kind === 'patient' && room && !room.def.support) {
+        if (obj.state === 'waiting' && assignPatientToRoom(obj, room)) { G.selection = null; return; }
+        if (obj.state !== 'waiting') G.sfx('denied');
+        return;
+      }
+      if (kind === 'staff') {
+        if (room && !room.def.support) { if (assignStaff(obj, room)) G.selection = null; return; }
+        if (room && room.def.support) { G.sfx('denied'); return; }
+        if (inLobby(x, y) && !hitPatient(x, y) && !hitStaff(x, y)) {
+          if (assignStaff(obj, 'lobby')) G.selection = null;
+          return;
+        }
+      }
+      // fall through: maybe they clicked another entity
+    }
+
+    // 3. Select an entity
+    const p = hitPatient(x, y);
+    if (p) {
+      G.selection = { kind: 'patient', obj: p };
+      G.sfx('select');
+      el.tooltip.innerHTML = p.diagnosed
+        ? `<b>${p.def.name}</b> — needs <b>${ROOM_TYPES[PATHOGENS[p.typeKey].room].name.toUpperCase()}</b>. ${p.def.desc}`
+        : '<b>UNDIAGNOSED</b> — a lobby nurse (or the Lab-Router) must identify the pathogen. You can still bed them, but treatment crawls.';
+      return;
+    }
+    const s = hitStaff(x, y);
+    if (s) {
+      G.selection = { kind: 'staff', obj: s };
+      G.sfx('select');
+      el.tooltip.innerHTML = `<b>${s.def.name}</b> — ${s.def.desc} Click a room to assign (or the lobby floor for triage duty).`;
+      return;
+    }
+    const r = hitRoom(x, y);
+    if (r) {
+      el.tooltip.innerHTML = `<b>${r.def.name}</b> — ${r.def.desc} Staff ${r.staff.length}/${r.def.staffSlots}` +
+        (r.def.beds ? `, beds ${r.beds.filter(Boolean).length}/${r.def.beds}.` : '.');
+    }
+    G.selection = null;
   });
 
-  canvas.addEventListener('contextmenu', evt => { evt.preventDefault(); G.placing = null; refreshShop(); });
+  canvas.addEventListener('contextmenu', evt => {
+    evt.preventDefault();
+    G.selection = null;
+    G.buildType = null;
+    refreshShop();
+  });
   window.addEventListener('keydown', evt => {
-    if (evt.key === 'Escape') { G.placing = null; G.dragUpgrade = null; el.dragGhost.classList.add('hidden'); refreshShop(); }
+    if (evt.key === 'Escape') {
+      G.selection = null; G.buildType = null; G.dragUpgrade = null;
+      el.dragGhost.classList.add('hidden');
+      refreshShop();
+    }
   });
 
   // Upgrade drag & drop
@@ -414,78 +669,118 @@
     el.dragGhost.classList.add('hidden');
     if (G.state !== 'playing') return;
     const rect = canvas.getBoundingClientRect();
-    if (evt.clientX >= rect.left && evt.clientX <= rect.right && evt.clientY >= rect.top && evt.clientY <= rect.bottom) {
-      const p = canvasPos(evt);
-      dropUpgrade(key, p.x, p.y);
-    }
+    if (evt.clientX < rect.left || evt.clientX > rect.right || evt.clientY < rect.top || evt.clientY > rect.bottom) return;
+    const { x, y } = canvasPos(evt);
+    dropUpgrade(key, x, y);
   });
 
+  function dropUpgrade(key, px, py) {
+    const def = UPGRADE_TYPES[key];
+    if (G.budget < def.cost) { G.sfx('denied'); return; }
+    if (def.target === 'staff') {
+      const s = hitStaff(px, py);
+      if (!s) { G.addText(px, py, 'DROP ON A STAFF MEMBER', PALETTE.amber, 1.2); G.sfx('denied'); return; }
+      if (s.scribe) { G.addText(px, py, 'ALREADY HAS A SCRIBE', PALETTE.amber, 1.2); G.sfx('denied'); return; }
+      s.scribe = true;
+      G.budget -= def.cost;
+      G.addText(s.x, s.y - 40, 'AI SCRIBE ONLINE', PALETTE.toxic, 1.5);
+    } else if (def.target === 'lobby') {
+      if (G.upgrades.labRouter || !inLobby(px, py)) { G.sfx('denied'); if (!G.upgrades.labRouter) G.addText(px, py, 'DROP ON THE LOBBY', PALETTE.amber, 1.2); return; }
+      G.upgrades.labRouter = true;
+      G.budget -= def.cost;
+      G.addText(400, floorWalkY(0) - 50, 'LAB-ROUTER ONLINE: AUTO-TRIAGE ACTIVE', PALETTE.toxic, 2);
+    } else if (def.target === 'exit') {
+      if (G.upgrades.priorAuth || !inEntrance(px, py)) { G.sfx('denied'); if (!G.upgrades.priorAuth) G.addText(px, py, 'DROP ON THE ENTRANCE DOOR', PALETTE.amber, 1.2); return; }
+      G.upgrades.priorAuth = true;
+      G.budget -= def.cost;
+      G.addText(120, floorWalkY(0) - 50, 'PRIOR-AUTH AGENT ONLINE', PALETTE.toxic, 2);
+    }
+    G.sfx('buy');
+    refreshShop();
+  }
+
   /* ---------- Shop ---------- */
-  const shopButtons = { towers: {}, upgrades: {} };
+  const shopButtons = { rooms: {}, staff: {}, upgrades: {} };
 
   function iconCanvas(draw) {
     const c = document.createElement('canvas');
     c.width = 40; c.height = 40;
     const ictx = c.getContext('2d');
     ictx.imageSmoothingEnabled = false;
-    ictx.save(); ictx.translate(20, 24); ictx.scale(1.6, 1.6); ictx.translate(-0, -0);
+    ictx.save(); ictx.translate(20, 22); ictx.scale(1.4, 1.4);
     draw(ictx);
     ictx.restore();
     return c;
   }
 
+  function makeShopItem(parent, iconDraw, name, cost, tooltipHtml, onActivate, drag) {
+    const item = document.createElement('div');
+    item.className = 'shop-item' + (drag ? ' upgrade' : '');
+    item.appendChild(iconCanvas(iconDraw));
+    item.insertAdjacentHTML('beforeend',
+      `<div class="si-name">${name.toUpperCase()}</div><div class="si-cost">$${cost}</div>`);
+    item.addEventListener(drag ? 'mousedown' : 'click', evt => {
+      ensureAudio();
+      if (item.classList.contains('disabled') || item.classList.contains('soldout')) { G.sfx('denied'); return; }
+      onActivate(evt, item);
+      if (drag) evt.preventDefault();
+    });
+    item.addEventListener('mouseenter', () => { el.tooltip.innerHTML = tooltipHtml; });
+    parent.appendChild(item);
+    return item;
+  }
+
   function buildShop() {
-    for (const [key, def] of Object.entries(TOWER_TYPES)) {
-      const item = document.createElement('div');
-      item.className = 'shop-item';
-      item.appendChild(iconCanvas(ictx => drawStaffSprite(ictx, key, 0, 2)));
-      item.insertAdjacentHTML('beforeend',
-        `<div class="si-name">${def.name.toUpperCase()}</div><div class="si-cost">$${def.cost} \u00b7 ${def.rooms}RM</div>`);
-      item.addEventListener('click', () => {
-        ensureAudio();
-        if (item.classList.contains('disabled')) { G.sfx('denied'); return; }
-        G.placing = (G.placing === key) ? null : key;
-        refreshShop();
-      });
-      item.addEventListener('mouseenter', () => { el.tooltip.innerHTML = `<b>${def.name}</b> \u2014 ${def.desc}`; });
-      el.shopTowers.appendChild(item);
-      shopButtons.towers[key] = item;
+    for (const [key, def] of Object.entries(ROOM_TYPES)) {
+      shopButtons.rooms[key] = makeShopItem(
+        el.shopRooms,
+        ictx => drawRoomIcon(ictx, key, 0, 0),
+        def.name, def.cost,
+        `<b>${def.name}</b> — ${def.desc} Then click an empty floor slot.`,
+        () => { G.buildType = (G.buildType === key) ? null : key; G.selection = null; refreshShop(); },
+      );
+    }
+    for (const [key, def] of Object.entries(STAFF_TYPES)) {
+      shopButtons.staff[key] = makeShopItem(
+        el.shopStaff,
+        ictx => drawStaffSprite(ictx, key, 0, 10),
+        def.name, def.cost,
+        `<b>${def.name}</b> — ${def.desc}`,
+        () => hireStaff(key),
+      );
     }
     for (const [key, def] of Object.entries(UPGRADE_TYPES)) {
-      const item = document.createElement('div');
-      item.className = 'shop-item upgrade';
-      item.appendChild(iconCanvas(ictx => drawUpgradeIcon(ictx, key, 0, -3)));
-      item.insertAdjacentHTML('beforeend',
-        `<div class="si-name">${def.name.toUpperCase()}</div><div class="si-cost">$${def.cost}</div>`);
-      item.addEventListener('mousedown', evt => {
-        ensureAudio();
-        if (item.classList.contains('disabled') || item.classList.contains('soldout')) { G.sfx('denied'); return; }
-        G.dragUpgrade = key;
-        el.dragGhost.innerHTML = '';
-        const gc = document.createElement('canvas');
-        gc.width = 36; gc.height = 36;
-        const gctx = gc.getContext('2d');
-        gctx.imageSmoothingEnabled = false;
-        gctx.save(); gctx.translate(18, 18); gctx.scale(1.7, 1.7); drawUpgradeIcon(gctx, key, 0, 0); gctx.restore();
-        el.dragGhost.appendChild(gc);
-        el.dragGhost.style.left = (evt.clientX - 18) + 'px';
-        el.dragGhost.style.top = (evt.clientY - 18) + 'px';
-        el.dragGhost.classList.remove('hidden');
-        evt.preventDefault();
-      });
-      item.addEventListener('mouseenter', () => { el.tooltip.innerHTML = `<b>${def.name}</b> \u2014 ${def.desc}`; });
-      el.shopUpgrades.appendChild(item);
-      shopButtons.upgrades[key] = item;
+      shopButtons.upgrades[key] = makeShopItem(
+        el.shopUpgrades,
+        ictx => drawUpgradeIcon(ictx, key, 0, -2),
+        def.name, def.cost,
+        `<b>${def.name}</b> — ${def.desc}`,
+        evt => {
+          G.dragUpgrade = key;
+          el.dragGhost.innerHTML = '';
+          const gc = document.createElement('canvas');
+          gc.width = 36; gc.height = 36;
+          const gctx = gc.getContext('2d');
+          gctx.imageSmoothingEnabled = false;
+          gctx.save(); gctx.translate(18, 18); gctx.scale(1.7, 1.7); drawUpgradeIcon(gctx, key, 0, 0); gctx.restore();
+          el.dragGhost.appendChild(gc);
+          el.dragGhost.style.left = (evt.clientX - 18) + 'px';
+          el.dragGhost.style.top = (evt.clientY - 18) + 'px';
+          el.dragGhost.classList.remove('hidden');
+        },
+        true,
+      );
     }
   }
 
   function refreshShop() {
-    if (!G.level) return;
-    for (const [key, def] of Object.entries(TOWER_TYPES)) {
-      const item = shopButtons.towers[key];
-      const affordable = G.budget >= def.cost && G.roomsUsed + def.rooms <= G.level.maxRooms;
-      item.classList.toggle('disabled', !affordable);
-      item.classList.toggle('selected', G.placing === key);
+    for (const [key, def] of Object.entries(ROOM_TYPES)) {
+      const item = shopButtons.rooms[key];
+      item.classList.toggle('disabled', G.budget < def.cost);
+      item.classList.toggle('selected', G.buildType === key);
+    }
+    for (const [key, def] of Object.entries(STAFF_TYPES)) {
+      shopButtons.staff[key].classList.toggle('disabled', G.budget < def.cost);
     }
     for (const [key, def] of Object.entries(UPGRADE_TYPES)) {
       const item = shopButtons.upgrades[key];
@@ -496,146 +791,289 @@
   }
 
   /* ---------- Render ---------- */
+  const FONT = '7px "Press Start 2P", monospace';
+
   function render() {
-    if (!G.level) return;
-    const lv = G.level;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Floor checkerboard
-    for (let y = 0; y < lv.gridH; y++) {
-      for (let x = 0; x < lv.gridW; x++) {
-        ctx.fillStyle = (x + y) % 2 === 0 ? PALETTE.floorA : PALETTE.floorB;
-        ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
-      }
+    // Night sky + stars
+    ctx.fillStyle = PALETTE.night;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#3a4a6a';
+    for (let i = 0; i < 24; i++) {
+      ctx.fillRect((i * 137 + 40) % canvas.width, (i * 71 + 10) % Math.max(1, floorTopY(NUM_FLOORS - 1) - 10), 2, 2);
     }
-    // Corridor
-    for (const key of G.pathTiles) {
-      const [x, y] = key.split(',').map(Number);
-      ctx.fillStyle = PALETTE.path;
-      ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
-      ctx.fillStyle = PALETTE.pathEdge;
-      ctx.fillRect(x * TILE, y * TILE, TILE, 2);
-      ctx.fillRect(x * TILE, y * TILE + TILE - 2, TILE, 2);
-    }
-    // Entrance + ICU gate
-    const ent = entrancePx(), ext = exitPx();
-    ctx.fillStyle = PALETTE.entrance;
-    ctx.fillRect(ent.x - TILE / 2, ent.y - TILE / 2, 6, TILE);
-    ctx.fillStyle = PALETTE.ink;
-    ctx.font = '7px "Press Start 2P", monospace';
-    ctx.fillText('IN', ent.x - TILE / 2 + 9, ent.y + 3);
-    ctx.fillStyle = PALETTE.exit;
-    ctx.fillRect(ext.x + TILE / 2 - 6, ext.y - TILE / 2, 6, TILE);
+
+    // Street
+    ctx.fillStyle = '#161c2e';
+    ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
+    ctx.fillStyle = '#242e48';
+    ctx.fillRect(0, GROUND_Y, canvas.width, 3);
+
+    // Building shell
+    const bTop = floorTopY(NUM_FLOORS - 1);
+    ctx.fillStyle = PALETTE.building;
+    ctx.fillRect(32, bTop - 14, 848 - 8, GROUND_Y - bTop + 14);
+    // Roof sign
+    ctx.fillStyle = PALETTE.frame;
+    ctx.fillRect(32, bTop - 14, 840, 14);
     ctx.fillStyle = PALETTE.red;
-    ctx.fillText('ICU', ext.x - TILE / 2 + 2, ext.y - TILE / 2 - 4);
+    ctx.fillRect(388, bTop - 34, 20, 20);
+    ctx.fillStyle = PALETTE.white;
+    ctx.fillRect(396, bTop - 30, 4, 12); ctx.fillRect(392, bTop - 26, 12, 4);
+    ctx.font = FONT;
+    ctx.fillStyle = PALETTE.blue;
+    ctx.textAlign = 'left';
+    ctx.fillText('CODE BLUE GENERAL', 420, bTop - 20);
 
-    // Installed gate agents
-    if (G.upgrades.labRouter) {
-      drawUpgradeIcon(ctx, 'labRouter', ent.x + 2, ent.y - TILE + 4, 1);
-      pulseGlow(ent.x + 2, ent.y - TILE + 4);
-    }
-    if (G.upgrades.priorAuth) {
-      drawUpgradeIcon(ctx, 'priorAuth', ext.x - 2, ext.y - TILE + 2, 1);
-      pulseGlow(ext.x - 2, ext.y - TILE + 2);
-    }
-
-    // Towers (bed pad + staff sprite + stress bar + scribe chip)
-    for (const t of G.towers) {
-      const f = t.def.footprint;
-      ctx.fillStyle = '#c2d4d8';
-      ctx.fillRect(t.tx * TILE + 2, t.ty * TILE + 2, f * TILE - 4, f * TILE - 4);
-      ctx.strokeStyle = PALETTE.pathEdge;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(t.tx * TILE + 2, t.ty * TILE + 2, f * TILE - 4, f * TILE - 4);
-
-      const burned = t.isBurnedOut(G.time);
-      ctx.globalAlpha = burned ? 0.45 : 1;
-      drawStaffSprite(ctx, t.typeKey, t.cx, t.cy + 4, f === 2 ? 1.5 : 1);
-      ctx.globalAlpha = 1;
-
-      if (burned) {
-        ctx.fillStyle = PALETTE.red;
-        ctx.font = '7px "Press Start 2P", monospace';
-        const left = Math.ceil(t.burnoutUntil - G.time);
-        ctx.fillText(`BURNOUT ${left}`, t.tx * TILE - 4, t.ty * TILE - 4);
-      } else if (t.def.stressPerAction > 0) {
-        // stress bar (amber -> red as it fills)
-        const w = f * TILE - 8, frac = t.stress / 100;
-        ctx.fillStyle = PALETTE.ink;
-        ctx.fillRect(t.tx * TILE + 4, t.ty * TILE - 6, w, 4);
-        ctx.fillStyle = frac > 0.7 ? PALETTE.red : PALETTE.amber;
-        ctx.fillRect(t.tx * TILE + 4, t.ty * TILE - 6, w * frac, 4);
-      }
-      if (t.scribe) {
-        drawUpgradeIcon(ctx, 'scribe', t.tx * TILE + f * TILE - 6, t.ty * TILE + 2, 0.7);
-        pulseGlow(t.tx * TILE + f * TILE - 6, t.ty * TILE + 2);
+    // Floors
+    for (let f = 0; f < NUM_FLOORS; f++) {
+      const top = floorTopY(f);
+      // floor slab
+      ctx.fillStyle = PALETTE.floorLine;
+      ctx.fillRect(32, top + FLOOR_H - 4, 840, 4);
+      if (f === 0) continue;
+      for (let sl = 0; sl < SLOTS_PER_FLOOR; sl++) {
+        const room = roomAt(f, sl);
+        const x = slotX(sl);
+        if (room) drawRoomInterior(room);
+        else {
+          ctx.fillStyle = PALETTE.slotDark;
+          ctx.fillRect(x + 2, top + 2, SLOT_W - 4, FLOOR_H - 6);
+          ctx.strokeStyle = '#22304a';
+          ctx.setLineDash([4, 4]);
+          ctx.strokeRect(x + 8, top + 8, SLOT_W - 16, FLOOR_H - 18);
+          ctx.setLineDash([]);
+        }
       }
     }
 
-    // Treatment beams
-    for (const b of G.beams) {
-      ctx.globalAlpha = Math.max(0, b.t / 0.15);
-      ctx.strokeStyle = b.color;
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2); ctx.stroke();
+    // Lobby interior
+    drawLobby();
+
+    // Elevator shaft
+    ctx.fillStyle = '#101828';
+    ctx.fillRect(ELEV_X, bTop, ELEV_W, GROUND_Y - bTop);
+    ctx.fillStyle = '#2e3c5c';
+    ctx.fillRect(ELEV_X + 4, bTop, 2, GROUND_Y - bTop);
+    ctx.fillRect(ELEV_X + ELEV_W - 6, bTop, 2, GROUND_Y - bTop);
+    for (let f = 0; f < NUM_FLOORS; f++) {
+      ctx.fillStyle = PALETTE.frame;
+      ctx.fillRect(ELEV_X, floorTopY(f) + FLOOR_H - 4, ELEV_W, 4);
+    }
+
+    // Build-mode hover ghost
+    if (G.buildType && G.hover) {
+      const slot = slotFromPoint(G.hover.x, G.hover.y);
+      if (slot) {
+        const free = !roomAt(slot.floor, slot.slot);
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = free ? PALETTE.green : PALETTE.red;
+        ctx.fillRect(slotX(slot.slot) + 2, floorTopY(slot.floor) + 2, SLOT_W - 4, FLOOR_H - 6);
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // Entities
+    for (const s of G.staffList) drawStaffEntity(s);
+    for (const p of G.patients) drawPatientEntity(p);
+
+    // Diagnosis beams
+    for (const s of G.staffList) {
+      if (s.room === 'lobby' && s.diagPatient && !s.isBurnedOut(G.time)) {
+        ctx.strokeStyle = PALETTE.blue;
+        ctx.globalAlpha = 0.6;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y - 14);
+        ctx.lineTo(s.diagPatient.x, s.diagPatient.y - 14);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // Particles
+    for (const pt of G.particles) {
+      const frac = pt.t / pt.life;
+      ctx.globalAlpha = 1 - frac;
+      ctx.fillStyle = pt.color;
+      if (pt.kind === 'plus') {
+        ctx.fillRect(pt.x - 1, pt.y - 3, 2, 6);
+        ctx.fillRect(pt.x - 3, pt.y - 1, 6, 2);
+      } else if (pt.kind === 'puff') {
+        const r = 2 + frac * 5;
+        ctx.fillRect(pt.x - r / 2, pt.y - r / 2, r, r);
+      } else {
+        ctx.fillRect(pt.x - 2, pt.y - 2, 4, 4);
+      }
       ctx.globalAlpha = 1;
     }
 
-    // Patients + status bars
-    for (const p of G.patients) {
-      drawPatientSprite(ctx, p.typeKey, p.x, p.y, G.time * 6 + p.bob);
-      const bw = 16;
-      // health (crash bar)
-      ctx.fillStyle = PALETTE.ink;
-      ctx.fillRect(p.x - bw / 2, p.y - 17, bw, 3);
-      const hf = Math.max(0, p.health / 100);
-      ctx.fillStyle = hf > 0.5 ? PALETTE.green : (hf > 0.25 ? PALETTE.amber : PALETTE.red);
-      ctx.fillRect(p.x - bw / 2, p.y - 17, bw * hf, 3);
-      // complexity (diagnostic shield)
-      ctx.fillStyle = PALETTE.ink;
-      ctx.fillRect(p.x - bw / 2, p.y - 13, bw, 3);
-      ctx.fillStyle = PALETTE.blue;
-      ctx.fillRect(p.x - bw / 2, p.y - 13, bw * Math.max(0, p.complexity / p.maxComplexity), 3);
-      if (p.assessed) { ctx.fillStyle = PALETTE.blue; ctx.fillRect(p.x - bw / 2 - 4, p.y - 16, 3, 3); }
-      if (p.aiTag) { ctx.fillStyle = PALETTE.toxic; ctx.fillRect(p.x + bw / 2 + 1, p.y - 16, 3, 3); }
-    }
-
-    // Placement ghost
-    if (G.placing && G.hoverTile && G.state === 'playing') {
-      const def = TOWER_TYPES[G.placing];
-      const { tx, ty } = G.hoverTile;
-      const ok = placementValid(G.placing, tx, ty);
-      const f = def.footprint;
-      ctx.globalAlpha = 0.4;
-      ctx.fillStyle = ok ? PALETTE.green : PALETTE.red;
-      ctx.fillRect(tx * TILE, ty * TILE, f * TILE, f * TILE);
-      ctx.globalAlpha = 0.25;
-      ctx.strokeStyle = ok ? PALETTE.green : PALETTE.red;
+    // Selection highlight + hint
+    if (G.selection) {
+      const o = G.selection.obj;
+      ctx.strokeStyle = PALETTE.green;
+      ctx.globalAlpha = 0.6 + 0.4 * Math.sin(G.time * 6);
       ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc((tx + f / 2) * TILE, (ty + f / 2) * TILE, def.range, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.strokeRect(o.x - 13, o.y - 34, 26, 40);
       ctx.globalAlpha = 1;
+      ctx.font = FONT;
+      ctx.fillStyle = PALETTE.green;
+      ctx.textAlign = 'center';
+      const hint = G.selection.kind === 'patient' ? 'CLICK A ROOM TO ALLOCATE' : 'CLICK A ROOM (OR LOBBY) TO ASSIGN';
+      ctx.fillText(hint, canvas.width / 2, 14);
+    }
+    if (G.buildType) {
+      ctx.font = FONT;
+      ctx.fillStyle = PALETTE.amber;
+      ctx.textAlign = 'center';
+      ctx.fillText(`CLICK AN EMPTY SLOT TO BUILD: ${ROOM_TYPES[G.buildType].name.toUpperCase()}`, canvas.width / 2, 14);
     }
 
-    // Floating combat text
-    ctx.font = '7px "Press Start 2P", monospace';
+    // Floating texts
+    ctx.font = FONT;
     ctx.textAlign = 'center';
     for (const t of G.texts) {
       const frac = t.t / t.life;
       ctx.globalAlpha = 1 - frac;
       ctx.fillStyle = t.color;
-      ctx.fillText(t.text, Math.round(t.x), Math.round(t.y - frac * 18));
+      ctx.fillText(t.text, Math.round(t.x), Math.round(t.y - frac * 16));
       ctx.globalAlpha = 1;
     }
-    ctx.textAlign = 'left';
 
     // Prep countdown
-    if (G.state === 'playing' && G.phase === 'prep' && G.waveIdx < G.level.waves.length - 1) {
-      ctx.fillStyle = PALETTE.ink;
+    if (G.state === 'playing' && G.phase === 'prep') {
+      ctx.fillStyle = PALETTE.amber;
       ctx.font = '8px "Press Start 2P", monospace';
-      const next = G.waveIdx + 2 > G.level.waves.length ? G.level.waves.length : G.waveIdx + 2;
-      ctx.fillText(`NEXT WAVE IN ${Math.ceil(G.prepTimer)}...`, 8, canvas.height - 8);
+      ctx.textAlign = 'left';
+      ctx.fillText(`NEXT SHIFT IN ${Math.ceil(G.prepTimer)}…`, 8, canvas.height - 8);
+    }
+    ctx.textAlign = 'left';
+  }
+
+  function drawLobby() {
+    const top = floorTopY(0);
+    ctx.fillStyle = '#1c2438';
+    ctx.fillRect(ELEV_X + ELEV_W, top + 2, 872 - ELEV_X - ELEV_W, FLOOR_H - 6);
+    // waiting chairs
+    for (let i = 0; i < WAIT_SPOTS; i++) {
+      const x = waitSpotX(i);
+      ctx.fillStyle = '#31405e';
+      ctx.fillRect(x - 10, floorWalkY(0) - 6, 20, 4);
+      ctx.fillRect(x - 10, floorWalkY(0) - 14, 3, 10);
+    }
+    ctx.font = FONT;
+    ctx.fillStyle = '#516a8a';
+    ctx.fillText('WAITING ROOM', 400, top + 16);
+
+    // Entrance door (also the happy exit)
+    ctx.fillStyle = '#0e1626';
+    ctx.fillRect(34, top + 10, 28, FLOOR_H - 18);
+    ctx.fillStyle = PALETTE.green;
+    ctx.fillRect(34, top + 10, 28, 4);
+    ctx.fillStyle = PALETTE.white;
+    ctx.font = FONT;
+    ctx.fillText('ER', 42, top + 34);
+    if (G.upgrades.priorAuth) {
+      drawUpgradeIcon(ctx, 'priorAuth', 48, top + 54, 0.8);
+      pulseGlow(48, top + 54);
+    }
+    if (G.upgrades.labRouter) {
+      drawUpgradeIcon(ctx, 'labRouter', 130, top + 20, 1);
+      pulseGlow(130, top + 20);
+    }
+  }
+
+  function drawRoomInterior(room) {
+    const { x, y, w, h } = room;
+    // lit interior, tinted by room type
+    ctx.fillStyle = '#20293e';
+    ctx.fillRect(x + 2, y + 2, w - 4, h - 6);
+    ctx.fillStyle = room.def.color;
+    ctx.globalAlpha = 0.14;
+    ctx.fillRect(x + 2, y + 2, w - 4, h - 6);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = room.def.color;
+    ctx.fillRect(x + 2, y + 2, w - 4, 3);
+    // label
+    ctx.font = FONT;
+    ctx.fillStyle = room.def.color;
+    ctx.textAlign = 'left';
+    ctx.fillText(room.def.name.toUpperCase(), x + 10, y + 18);
+
+    if (room.def.support) {
+      // break room: coffee machine + couch
+      const wy = floorWalkY(room.floor);
+      ctx.fillStyle = '#31405e';
+      ctx.fillRect(x + w * 0.5 - 24, wy - 8, 48, 6);
+      ctx.fillRect(x + w * 0.5 - 24, wy - 16, 5, 14);
+      ctx.fillRect(x + w * 0.5 + 19, wy - 16, 5, 14);
+      ctx.fillStyle = PALETTE.white;
+      ctx.fillRect(x + w - 40, wy - 22, 14, 20);
+      ctx.fillStyle = room.def.color;
+      ctx.fillRect(x + w - 37, wy - 18, 8, 6);
+    } else {
+      for (let i = 0; i < room.def.beds; i++) {
+        const pos = room.bedPos(i);
+        drawBed(ctx, pos.x, pos.y);
+      }
+    }
+  }
+
+  function drawPatientEntity(p) {
+    if (p.state === 'transfer') {
+      // stretcher flash — sad, not violent
+      const on = Math.floor(p.transferT * 8) % 2 === 0;
+      ctx.globalAlpha = on ? 1 : 0.35;
+      ctx.fillStyle = '#c8d8dc';
+      ctx.fillRect(p.x - 14, p.y - 8, 28, 5);
+      drawPatientSprite(ctx, p.x, p.y - 6, 0, 'sick');
+      ctx.globalAlpha = 1;
+      return;
+    }
+    const mood = p.state === 'exiting' ? 'happy' : 'sick';
+    drawPatientSprite(ctx, p.x, p.y, G.time * 5 + p.bob, mood);
+    if (p.state === 'exiting') return;                       // cured: no bars, no germ
+
+    // The ailment — the actual enemy — rides above the patient.
+    drawAilment(ctx, p.diagnosed ? p.typeKey : null, p.x, p.y - 32, p.ailmentScale(), G.time + p.bob);
+
+    // deterioration bar (red = the disease is winning)
+    const bw = 18;
+    ctx.fillStyle = PALETTE.ink;
+    ctx.fillRect(p.x - bw / 2, p.y - 44, bw, 3);
+    const hf = Math.max(0, p.health / 100);
+    ctx.fillStyle = hf > 0.5 ? PALETTE.green : (hf > 0.25 ? PALETTE.amber : PALETTE.red);
+    ctx.fillRect(p.x - bw / 2, p.y - 44, bw * hf, 3);
+    // treatment progress (blue, drains as care lands)
+    ctx.fillStyle = PALETTE.ink;
+    ctx.fillRect(p.x - bw / 2, p.y - 40, bw, 3);
+    ctx.fillStyle = PALETTE.blue;
+    ctx.fillRect(p.x - bw / 2, p.y - 40, bw * Math.max(0, p.complexity / p.maxComplexity), 3);
+    if (p.aiTag) { ctx.fillStyle = PALETTE.toxic; ctx.fillRect(p.x + bw / 2 + 2, p.y - 44, 3, 3); }
+  }
+
+  function drawStaffEntity(s) {
+    const burned = s.isBurnedOut(G.time);
+    ctx.globalAlpha = burned ? 0.45 : 1;
+    drawStaffSprite(ctx, s.typeKey, s.x, s.y, s.state === 'walking' ? G.time * 9 : 0);
+    ctx.globalAlpha = 1;
+    if (burned) {
+      ctx.font = FONT;
+      ctx.fillStyle = PALETTE.red;
+      ctx.textAlign = 'center';
+      ctx.fillText(`BURNOUT ${Math.ceil(s.burnoutUntil - G.time)}`, s.x, s.y - 34);
+      ctx.textAlign = 'left';
+    } else if (s.stress > 0) {
+      const bw = 16, frac = s.stress / 100;
+      ctx.fillStyle = PALETTE.ink;
+      ctx.fillRect(s.x - bw / 2, s.y - 30, bw, 3);
+      ctx.fillStyle = frac > 0.7 ? PALETTE.red : PALETTE.amber;
+      ctx.fillRect(s.x - bw / 2, s.y - 30, bw * frac, 3);
+    }
+    if (s.scribe) {
+      drawUpgradeIcon(ctx, 'scribe', s.x + 10, s.y - 26, 0.6);
     }
   }
 
@@ -649,41 +1087,25 @@
 
   /* ---------- HUD ---------- */
   function refreshHud() {
-    if (!G.level) return;
     el.budget.textContent = `$${G.budget}`;
-    el.lives.innerHTML = `&hearts; ${Math.max(0, G.lives)}`;
-    el.wave.textContent = `WAVE ${Math.max(1, G.waveIdx + 1)}/${G.level.waves.length}`;
-    el.rooms.textContent = `ROOMS ${G.roomsUsed}/${G.level.maxRooms}`;
+    el.lives.innerHTML = `ICU ${'\u2665'.repeat(Math.max(0, G.lives))}${'\u2661'.repeat(Math.max(0, START_LIVES - G.lives))}`;
+    el.shift.textContent = G.shiftIdx < 0 ? 'PREP' : `SHIFT ${G.shiftIdx + 1}/${SHIFTS.length}`;
+    el.waiting.textContent = `WAITING ${waitingPatients().length}`;
   }
 
-  /* ---------- Level select / result screens ---------- */
-  function buildLevelSelect() {
-    el.levelCards.innerHTML = '';
-    const stars = getStars();
-    LEVELS.forEach((lv, i) => {
-      const locked = i > 0 && stars[i - 1] === 0;
-      const card = document.createElement('div');
-      card.className = 'level-card' + (locked ? ' locked' : '');
-      card.innerHTML =
-        `<div class="lv-num">LEVEL ${lv.id}</div>` +
-        `<div class="lv-name">${lv.name}</div>` +
-        `<div class="lv-desc">${lv.desc}</div>` +
-        `<div class="lv-stars">${locked ? 'LOCKED' : ('\u2605'.repeat(stars[i]) + '\u2606'.repeat(3 - stars[i]))}</div>`;
-      if (!locked) card.addEventListener('click', () => { ensureAudio(); G.sfx('buy'); loadLevel(i); });
-      el.levelCards.appendChild(card);
-    });
-  }
-
+  /* ---------- Menu / result ---------- */
   function showMenu() {
     G.state = 'menu';
-    G.level = null;
-    buildLevelSelect();
     el.result.classList.add('hidden');
-    el.levelSelect.classList.remove('hidden');
+    const best = getBest();
+    el.menuBest.textContent = best
+      ? `BEST RUN: ${'\u2605'.repeat(best.stars)} \u00b7 ${best.discharged} PATIENTS HELPED`
+      : '';
+    el.menu.classList.remove('hidden');
   }
 
-  el.btnRetry.addEventListener('click', () => loadLevel(G.levelIdx));
-  el.btnNext.addEventListener('click', () => loadLevel(G.levelIdx + 1));
+  el.btnStart.addEventListener('click', () => { ensureAudio(); G.sfx('buy'); startRun(); });
+  el.btnRetry.addEventListener('click', () => { ensureAudio(); startRun(); });
   el.btnMenu.addEventListener('click', showMenu);
   window.addEventListener('pointerdown', ensureAudio, { once: true });
 
@@ -699,8 +1121,7 @@
   }
 
   buildShop();
+  refreshShop();
   showMenu();
-  // Default canvas backdrop behind the menu overlay
-  canvas.width = 640; canvas.height = 384;
   requestAnimationFrame(frame);
 })();

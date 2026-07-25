@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Code Blue Defense: Agentic Triage</title>
+<title>Code Blue Defense: Ward Shift</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="style.css" />
@@ -11,47 +11,56 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div id="title-mini">CODE BLUE DEFENSE<span class="sub">: AGENTIC TRIAGE</span></div>
+      <div id="title-mini">CODE BLUE DEFENSE<span class="sub">: WARD SHIFT</span></div>
       <div id="hud">
-        <span class="hud-item" id="hud-budget" title="Hospital Budget">$0</span>
-        <span class="hud-item" id="hud-lives" title="Patient lives remaining">&hearts; 0</span>
-        <span class="hud-item" id="hud-wave" title="Wave">WAVE 0/0</span>
-        <span class="hud-item" id="hud-rooms" title="Rooms used / max">ROOMS 0/0</span>
+        <span class="hud-item" id="hud-budget" title="Hospital budget">$0</span>
+        <span class="hud-item" id="hud-lives" title="ICU capacity remaining">ICU</span>
+        <span class="hud-item" id="hud-shift" title="Shift">PREP</span>
+        <span class="hud-item" id="hud-waiting" title="Patients in the waiting room">WAITING 0</span>
       </div>
     </header>
 
     <main id="stage">
-      <canvas id="game" width="640" height="384"></canvas>
+      <canvas id="game" width="880" height="620"></canvas>
 
-      <!-- Level select overlay -->
-      <div id="level-select" class="overlay">
+      <!-- Main menu overlay -->
+      <div id="menu" class="overlay">
         <h1>CODE BLUE DEFENSE</h1>
-        <h2>AGENTIC TRIAGE</h2>
-        <p class="tagline">Patients are deteriorating. Staff are finite.<br/>Deploy AI agents. Nobody crashes on your shift.</p>
-        <div id="level-cards"></div>
-        <p class="hint">Place staff next to the corridor. Drag AI upgrades onto staff, the entrance, or the ICU gate.</p>
+        <h2>WARD SHIFT</h2>
+        <p class="tagline">Build the hospital. Diagnose the pathogen. Allocate the bed.<br/>
+          Ten shifts. Nobody gets left in the waiting room.</p>
+        <button id="btn-start" class="pxbtn primary">START SHIFT 1</button>
+        <p id="menu-best" class="hint"></p>
+        <p class="hint">
+          BUILD rooms into empty floor slots &middot; HIRE staff and click a room to assign them
+          (lobby staff diagnose) &middot; CLICK a patient, then a room, to allocate their bed &middot;
+          DRAG AI agents onto staff, the lobby, or the door.
+        </p>
       </div>
 
       <!-- Win / loss overlay -->
       <div id="result" class="overlay hidden">
-        <h1 id="result-title">SHIFT COMPLETE</h1>
+        <h1 id="result-title">ALL SHIFTS COMPLETE</h1>
         <div id="result-stars"></div>
         <p id="result-detail"></p>
         <div class="btn-row">
-          <button id="btn-retry" class="pxbtn">REPLAY</button>
-          <button id="btn-next" class="pxbtn primary">NEXT LEVEL</button>
-          <button id="btn-menu" class="pxbtn">LEVEL SELECT</button>
+          <button id="btn-retry" class="pxbtn primary">NEW RUN</button>
+          <button id="btn-menu" class="pxbtn">MENU</button>
         </div>
       </div>
 
-      <!-- Wave / event banner -->
+      <!-- Shift / event banner -->
       <div id="banner" class="hidden"></div>
     </main>
 
     <footer id="shop">
       <div class="shop-group">
-        <div class="shop-label">HUMAN STAFF <span class="shop-note">(click, then click a tile)</span></div>
-        <div class="shop-items" id="shop-towers"></div>
+        <div class="shop-label">BUILD ROOMS <span class="shop-note">(click, then an empty slot)</span></div>
+        <div class="shop-items" id="shop-rooms"></div>
+      </div>
+      <div class="shop-group">
+        <div class="shop-label">HIRE STAFF <span class="shop-note">(then click a room)</span></div>
+        <div class="shop-items" id="shop-staff"></div>
       </div>
       <div class="shop-group">
         <div class="shop-label">AGENTIC AI <span class="shop-note">(drag onto target)</span></div>
@@ -59,7 +68,7 @@
       </div>
       <div class="shop-group" id="tooltip-box">
         <div class="shop-label">INFO</div>
-        <div id="tooltip">Select a unit to see details.</div>
+        <div id="tooltip">Select something to see details.</div>
       </div>
     </footer>
   </div>
