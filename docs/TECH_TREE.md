@@ -68,9 +68,16 @@ teaches its pain. Three handicaps, all implemented as global modifiers:
 Recommended: ship the first three; hold billing leakage as a difficulty
 option. The LOST CHART chime should be mildly infuriating by design.
 
+> **GATING REVISED:** era unlocks are now DECADE-GATED per `docs/ERAS.md`
+> (the run advances 1950s → 2030s, one decade per shift; techs appear in the
+> shop when their real-world decade arrives). The "own any 2 to advance"
+> rule below is retired; era tiers remain as shop section labels. The only
+> purchase dependency kept: software techs (Era 2+) require EHR TERMINAL.
+
 ## Era 1 — DIGITAL BACKBONE
 
-One purchase. Buying it is the gate to Era 2.
+One purchase. Unlocks in the **2000s** (shift 6); prerequisite for all later
+software techs.
 
 ### EHR TERMINAL — cost $250 — unique, hospital-wide
 - **Teaches:** Electronic Health Records — the digital chart every other
@@ -89,7 +96,8 @@ One purchase. Buying it is the gate to Era 2.
 
 ## Era 2 — CONNECTED HOSPITAL (requires EHR TERMINAL)
 
-Per-category purchases, buy any subset. Owning any 2 unlocks Era 3.
+Per-category purchases, buy any subset. Decade unlocks: E-PRESCRIBE HUB in
+the 2000s; TELEHEALTH KIOSK and PATIENT PORTAL in the 2010s.
 
 ### E-PRESCRIBE HUB — cost $150 — unique
 - **Teaches:** e-prescribing rails + transparent-cost pharmacy.
@@ -120,9 +128,9 @@ Per-category purchases, buy any subset. Owning any 2 unlocks Era 3.
   forms before arriving — smoothing the lobby rush that used to slam the
   front desk at 9 AM."
 
-## Era 3 — DATA & AUTOMATION (requires any 2 Era-2 purchases)
+## Era 3 — DATA & AUTOMATION (unlocks in the 2010s, shift 7)
 
-Owning any 2 unlocks Era 4.
+All five items arrive with the 2010s; REVCYCLE BOT waits for the 2020s.
 
 ### LAB AUTOLINE — cost $300 — unique
 - **Teaches:** automated laboratory diagnostics.
@@ -174,7 +182,7 @@ Owning any 2 unlocks Era 4.
   glucose, heart rhythm, oxygen — so deterioration is caught hours earlier,
   even outside hospital walls."
 
-## Era 4 — AGENTIC AI (requires any 2 Era-3 purchases)
+## Era 4 — AGENTIC AI (unlocks in the 2020s, shifts 8–9)
 
 The existing shop, re-homed as the summit of the tree. Existing mechanics
 carry over untouched; costs/effects unchanged except where noted.
@@ -200,7 +208,7 @@ carry over untouched; costs/effects unchanged except where noted.
   and route them to the right level of care — in one 2026 study, the share
   of patients arriving at the appropriate care setting more than doubled."
 
-### AGENTIC ROUTER — cost $400 — unique, sits on the lobby *(existing `labRouter`, renamed)*
+### AGENTIC ROUTER — cost $400 — unique, sits on the lobby *(existing `labRouter`, renamed; 2030s finale — unlocks shift 10)*
 - **Teaches:** autonomous care orchestration — the multi-agent endgame.
 - **Flavor:** *"the frontier: agentic AI orchestration"*
 - **Effect:** unchanged — instant AI diagnosis of every arrival + auto-assign
@@ -225,21 +233,28 @@ carry over untouched; costs/effects unchanged except where noted.
 ## Progression summary
 
 ```
-ERA 0  PAPER CHARTS      (handicap: slow diag, +burnout, LOST CHART)
-         |
-ERA 1  EHR TERMINAL      ($250, cures Era 0, adds mild click burden)
-         |
-ERA 2  E-PRESCRIBE HUB   TELEHEALTH KIOSK   PATIENT PORTAL          <- own any 2
-         |
-ERA 3  LAB AUTOLINE  IMAGING AI  FLOW COMMAND  REVCYCLE BOT  WARD WEARABLES  <- own any 2
-         |
-ERA 4  AMBIENT SCRIBE  AI TRIAGE KIOSK  AGENTIC ROUTER  PRIOR-AUTH AGENT
+1950s-90s  ERA 0  PAPER CHARTS (+ stepping stones: CRASH CART, MAINFRAME HIS,
+ (shifts          PULSE-OX MONITORS, PIONEER EMR — see docs/ERAS.md)
+  1-5)              |
+2000s      ERA 1  EHR TERMINAL ($250, cures Era 0, adds mild click burden)
+ (shift 6)  +      E-PRESCRIBE HUB
+                    |
+2010s      ERA 2/3 TELEHEALTH KIOSK  PATIENT PORTAL  LAB AUTOLINE
+ (shift 7)         IMAGING AI  FLOW COMMAND  WARD WEARABLES
+                    |
+2020s      ERA 4  AMBIENT SCRIBE  AI TRIAGE KIOSK  PRIOR-AUTH AGENT  REVCYCLE BOT
+ (shifts 8-9)       |
+2030s      FINALE AGENTIC ROUTER
+ (shift 10)
 ```
 
-Full tree cost ≈ $2,900 (+ scribes per staff), spread across a 10-shift run
-with START_BUDGET $600 — the player must choose a build, not buy everything.
-Suggested tuning target: a skilled player affords 1 era-2 item by shift 2–3,
-enters Era 3 by shift 5, and buys 1–2 Era-4 agents for the final crunch.
+Full tree cost ≈ $3,500 (incl. the four ERAS.md stepping stones, + scribes
+per staff), spread across a 10-shift run with START_BUDGET $600 — the player
+must choose a build, not buy everything. Suggested tuning target: a skilled
+player buys 2–3 stepping stones in shifts 2–5, affords the EHR the shift it
+unlocks (6), grabs 2–3 of the 2010s wave in shift 7, and banks for 1–2
+agents + the AGENTIC ROUTER finale in shifts 8–10 (decade payout inflation
+per `docs/ERAS.md` funds the late-game prices).
 
 ## Educational payload — 8-bit info cards
 
@@ -264,8 +279,9 @@ enters Era 3 by shift 5, and buys 1–2 Era-4 agents for the final crunch.
     `payoutMult`, `waitDecayOverride`, `selfTriagePeriod`). Keep the three
     existing keys (`scribe`, `labRouter`, `priorAuth`) as aliases so saves
     and `js/agentic.js` hooks don't break.
-  - Add `ERA_UNLOCK = { 2: 'ehr', 3: 2, 4: 2 }` (EHR gates Era 2; N owned
-    gates the next).
+  - Gating: add a `decade` field per tech + `requiresEhr: true` on software
+    techs; decade→shift mapping lives in the `DECADES` table (see
+    `docs/ERAS.md` implementation sketch). No purchase-count gating.
 - **`js/game.js`**
   - `state.tech` (Set of owned tech ids) + save/load via existing
     `localStorage` block.
@@ -298,9 +314,9 @@ enters Era 3 by shift 5, and buys 1–2 Era-4 agents for the final crunch.
    honest and most educational beat in the tree (EHR burden is *why*
    ambient scribes exist), but it's also the only upgrade with a downside;
    some players may read it as a bug.
-2. **Era gating strictness** — "own any 2 to advance" vs. unlocking by shift
-   number vs. fully free-form shopping with only the EHR as a gate. Any-2
-   forces breadth; is that the intended pressure?
+2. ~~**Era gating strictness**~~ — RESOLVED: decade gating per
+   `docs/ERAS.md` (techs unlock when their real-world decade arrives in the
+   run; EHR remains the one purchase prerequisite for later software).
 3. **Company flavor lines** — comfortable naming real companies ("as
    pioneered by Epic, Abridge…") on info cards, or should a config flag
    allow a company-free build for events/judges?
