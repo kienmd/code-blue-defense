@@ -149,8 +149,8 @@ function buildShop() {
       el.shopRooms,
       ictx => drawRoomIcon(ictx, key, 0, 0),
       def.name, def.cost,
-      `<b>${def.name}</b> — ${def.desc} Then click an empty floor slot.`,
-      () => { G.buildType = (G.buildType === key) ? null : key; G.selection = null; refreshShop(); },
+      `<b>${def.name}</b> — ${def.desc} Builds instantly in the next open slot.`,
+      () => { G.selection = null; buildRoom(key); },
     );
   }
   for (const [key, def] of Object.entries(STAFF_TYPES)) {
@@ -189,10 +189,10 @@ function startUpgradeDrag(key, evt) {
 }
 
 function refreshShop() {
+  const full = !nextBuildSlot();
   for (const [key, def] of Object.entries(ROOM_TYPES)) {
     const item = shopButtons.rooms[key];
-    item.classList.toggle('disabled', G.budget < def.cost);
-    item.classList.toggle('selected', G.buildType === key);
+    item.classList.toggle('disabled', full || G.budget < def.cost);
   }
   for (const [key, def] of Object.entries(STAFF_TYPES)) {
     shopButtons.staff[key].classList.toggle('disabled', G.budget < def.cost);

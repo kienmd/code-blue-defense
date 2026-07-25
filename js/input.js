@@ -3,11 +3,15 @@
  * keyboard, and the AI-upgrade drag-and-drop.
  * ============================================================ */
 
+/* Client px -> WORLD coords: undo the CSS scale, then invert the
+ * camera transform (G.view) that render.js applied this frame. */
 function canvasPos(evt) {
   const rect = canvas.getBoundingClientRect();
+  const cx = (evt.clientX - rect.left) * (canvas.width / rect.width);
+  const cy = (evt.clientY - rect.top) * (canvas.height / rect.height);
   return {
-    x: (evt.clientX - rect.left) * (canvas.width / rect.width),
-    y: (evt.clientY - rect.top) * (canvas.height / rect.height),
+    x: (cx - G.view.ox) / G.view.s,
+    y: (cy - G.view.oy) / G.view.s,
   };
 }
 
@@ -19,18 +23,7 @@ canvas.addEventListener('click', evt => {
   if (G.state !== 'playing') return;
   const { x, y } = canvasPos(evt);
 
-  // 1. Build mode
-  if (G.buildType) {
-    const slot = slotFromPoint(x, y);
-    if (slot && !roomAt(slot.floor, slot.slot)) {
-      buildRoom(G.buildType, slot.floor, slot.slot);
-      G.buildType = null;                  // one build per selection — no sticky mode
-      refreshShop();
-    } else G.sfx('denied');
-    return;
-  }
-
-  // 2. Selection-driven assignment
+  // 1. Selection-driven assignment
   if (G.selection) {
     const { kind, obj } = G.selection;
     const room = hitRoom(x, y);
@@ -50,7 +43,7 @@ canvas.addEventListener('click', evt => {
     // fall through: maybe they clicked another entity
   }
 
-  // 3. Select an entity
+  // 2. Select an entity
   const p = hitPatient(x, y);
   if (p) {
     G.selection = { kind: 'patient', obj: p };
@@ -78,15 +71,12 @@ canvas.addEventListener('click', evt => {
 canvas.addEventListener('contextmenu', evt => {
   evt.preventDefault();
   G.selection = null;
-  G.buildType = null;
-  refreshShop();
 });
 
 window.addEventListener('keydown', evt => {
   if (evt.key === 'Escape') {
-    G.selection = null; G.buildType = null; G.dragUpgrade = null;
+    G.selection = null; G.dragUpgrade = null;
     el.dragGhost.classList.add('hidden');
-    refreshShop();
   }
 });
 

@@ -22,7 +22,6 @@ function startRun() {
   G.schedule = [];
   G.shiftStats = freshShiftStats();
   G.selection = null;
-  G.buildType = null;
   G.texts = [];
   G.particles = [];
   el.menu.classList.add('hidden');
@@ -60,7 +59,6 @@ function startShift() {
 function endRun(won) {
   G.state = won ? 'won' : 'lost';
   G.selection = null;
-  G.buildType = null;
   let stars = 0;
   if (won) {
     stars = G.transfers === 0 ? 3 : (G.transfers <= 2 ? 2 : 1);
@@ -76,7 +74,6 @@ function endShift() {
   // cool-off until they click START SHIFT N+1.
   G.phase = 'cooloff';
   G.selection = null;
-  G.buildType = null;
   showShiftReport();
   refreshShiftButton();
   refreshShop();
@@ -171,13 +168,18 @@ function hireStaff(typeKey) {
   refreshShop();
 }
 
-function buildRoom(typeKey, floor, slot) {
+function buildRoom(typeKey) {
+  // Fallout Shelter-style: no slot picking. The room lands in the
+  // next open slot (floor 1 fills left-to-right, then floor 2, …).
   const def = ROOM_TYPES[typeKey];
   if (G.budget < def.cost) { G.sfx('denied'); return; }
+  const slot = nextBuildSlot();
+  if (!slot) { G.sfx('denied'); G.addText(WORLD_W / 2, floorTopY(NUM_FLOORS - 1) + 30, 'HOSPITAL FULL', PALETTE.amber, 1.6); return; }
   G.budget -= def.cost;
   G.shiftStats.spent += def.cost;
-  const r = new Room(typeKey, floor, slot);
+  const r = new Room(typeKey, slot.floor, slot.slot);
   G.rooms.push(r);
+  G.buildFlash = { floor: slot.floor, slot: slot.slot, t: 0 };
   G.addText(r.x + r.w / 2, r.y + 30, `${def.name.toUpperCase()} BUILT`, def.color, 1.6);
   G.sfx('place');
   refreshShop();
@@ -213,6 +215,11 @@ function update(dt) {
   if (G.lives <= 2) {
     G.heartbeatTimer -= dt;
     if (G.heartbeatTimer <= 0) { G.sfx('beep'); G.heartbeatTimer = 1.1; }
+  }
+
+  if (G.buildFlash) {
+    G.buildFlash.t += dt;
+    if (G.buildFlash.t > 1.2) G.buildFlash = null;
   }
 
   for (const t of G.texts) t.t += dt;

@@ -24,10 +24,14 @@ const G = {
   shiftElapsed: 0,
   schedule: [],
   shiftStats: null,         // per-shift report tally, reset by startShift()
+  // camera (world -> canvas): render.js eases zoom toward the fit
+  // for the visible floors; input.js inverts it for hit-testing.
+  zoom: 1,
+  view: { s: 1, ox: 0, oy: 0 },
+  buildFlash: null,         // {floor, slot, t} — highlight where a room landed
   // input
   selection: null,          // {kind:'patient'|'staff', obj}
-  buildType: null,
-  hover: null,              // {x,y} canvas coords
+  hover: null,              // {x,y} WORLD coords
   hoverPatientId: null,     // for INFO-panel updates on hover change
   dragUpgrade: null,
   autoAssignTimer: 0,
@@ -59,12 +63,26 @@ function roomAt(floor, slot) {
   return G.rooms.find(r => r.floor === floor && r.slot === slot) || null;
 }
 
-function slotFromPoint(px, py) {
-  if (px < SLOT_X0 || px >= SLOT_X0 + SLOTS_PER_FLOOR * SLOT_W) return null;
-  const floor = Math.floor((GROUND_Y - py) / FLOOR_H);
-  if (floor < 1 || floor >= NUM_FLOORS) return null;
-  const slot = Math.floor((px - SLOT_X0) / SLOT_W);
-  return { floor, slot };
+/* ---------- Progressive growth (Fallout Shelter-style) ----------
+ * Rooms auto-place: fill floor 1 left-to-right, then floor 2, etc.
+ * Only floors up to the next buildable one are shown.
+ */
+function nextBuildSlot() {
+  for (let f = 1; f < NUM_FLOORS; f++) {
+    for (let sl = 0; sl < SLOTS_PER_FLOOR; sl++) {
+      if (!roomAt(f, sl)) return { floor: f, slot: sl };
+    }
+  }
+  return null;                                   // hospital is full
+}
+
+function highestBuiltFloor() {
+  return G.rooms.reduce((m, r) => Math.max(m, r.floor), 0);
+}
+
+function topVisibleFloor() {
+  const next = nextBuildSlot();
+  return Math.max(1, Math.min(NUM_FLOORS - 1, Math.max(highestBuiltFloor(), next ? next.floor : NUM_FLOORS - 1)));
 }
 
 function inLobby(px, py) {

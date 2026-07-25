@@ -21,7 +21,7 @@
     </header>
 
     <main id="stage">
-      <canvas id="game" width="880" height="620"></canvas>
+      <canvas id="game" width="1240" height="620"></canvas>
 
       <!-- Main menu overlay -->
       <div id="menu" class="overlay">
@@ -32,8 +32,9 @@
         <button id="btn-start" class="pxbtn primary">START SHIFT 1</button>
         <p id="menu-best" class="hint"></p>
         <p class="hint">
-          BUILD rooms into empty floor slots &middot; HIRE staff and click a room to assign them
-          (lobby staff diagnose) &middot; CLICK a patient, then a room, to allocate their bed &middot;
+          BUILD rooms from the shop &mdash; they auto-place and the hospital grows &middot;
+          HIRE staff and click a room to assign them (lobby staff diagnose) &middot;
+          CLICK a patient, then a room, to allocate their bed &middot;
           DRAG AI agents onto staff, the lobby, or the door.
         </p>
       </div>
@@ -69,7 +70,7 @@
 
     <footer id="shop">
       <div class="shop-group">
-        <div class="shop-label">BUILD <span class="shop-note">(then click a slot)</span></div>
+        <div class="shop-label">BUILD <span class="shop-note">(auto-places)</span></div>
         <div class="shop-items" id="shop-rooms"></div>
       </div>
       <div class="shop-group">

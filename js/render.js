@@ -7,24 +7,41 @@
 const FONT = '7px "Press Start 2P", monospace';
 
 function render() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Night sky + stars
+  /* ---- Camera: ease zoom toward fitting the visible floors ----
+   * Few floors => zoomed in (big sprites); more floors => eased out.
+   * Uniform scale + translate; input.js inverts G.view for clicks. */
+  const topFloor = topVisibleFloor();
+  const worldTop = floorTopY(topFloor) - 44;               // roof sign headroom
+  const worldH = GROUND_Y + 16 - worldTop;
+  const targetZoom = Math.min(ZOOM_MAX, canvas.height / worldH);
+  G.zoom += (targetZoom - G.zoom) * ZOOM_EASE;
+  const s = G.zoom;
+  const ox = (canvas.width - WORLD_W * s) / 2;
+  const oy = (canvas.height - worldH * s) / 2 - worldTop * s;
+  G.view = { s, ox, oy };
+
+  // Night sky + stars (screen space, full canvas)
   ctx.fillStyle = PALETTE.night;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = '#3a4a6a';
-  for (let i = 0; i < 24; i++) {
-    ctx.fillRect((i * 137 + 40) % canvas.width, (i * 71 + 10) % Math.max(1, floorTopY(NUM_FLOORS - 1) - 10), 2, 2);
+  const skyH = Math.max(1, worldTop * s + oy);
+  for (let i = 0; i < 30; i++) {
+    ctx.fillRect((i * 137 + 40) % canvas.width, (i * 71 + 10) % skyH, 2, 2);
   }
 
-  // Street
-  ctx.fillStyle = '#161c2e';
-  ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
-  ctx.fillStyle = '#242e48';
-  ctx.fillRect(0, GROUND_Y, canvas.width, 3);
+  ctx.setTransform(s, 0, 0, s, ox, oy);                    // ---- world space ----
 
-  // Building shell + roof sign
-  const bTop = floorTopY(NUM_FLOORS - 1);
+  // Street (overdraw sideways/down to cover canvas gutters at low zoom)
+  ctx.fillStyle = '#161c2e';
+  ctx.fillRect(-400, GROUND_Y, WORLD_W + 800, 400);
+  ctx.fillStyle = '#242e48';
+  ctx.fillRect(-400, GROUND_Y, WORLD_W + 800, 3);
+
+  // Building shell + roof sign (only as tall as the visible floors)
+  const bTop = floorTopY(topFloor);
   ctx.fillStyle = PALETTE.building;
   ctx.fillRect(32, bTop - 14, 848 - 8, GROUND_Y - bTop + 14);
   ctx.fillStyle = PALETTE.frame;
@@ -38,24 +55,38 @@ function render() {
   ctx.textAlign = 'left';
   ctx.fillText('CODE BLUE GENERAL', 420, bTop - 20);
 
-  // Floors
-  for (let f = 0; f < NUM_FLOORS; f++) {
+  // Floors — only the ones in use, plus the next buildable floor as a
+  // dimmed "expansion" hint. The hospital visibly grows as you build.
+  const builtTop = highestBuiltFloor();
+  for (let f = 0; f <= topFloor; f++) {
     const top = floorTopY(f);
     ctx.fillStyle = PALETTE.floorLine;
     ctx.fillRect(32, top + FLOOR_H - 4, 840, 4);
     if (f === 0) continue;
+    const hintFloor = f > builtTop;                        // no rooms here yet
     for (let sl = 0; sl < SLOTS_PER_FLOOR; sl++) {
       const room = roomAt(f, sl);
       const x = slotX(sl);
       if (room) drawRoomInterior(room);
       else {
+        ctx.globalAlpha = hintFloor ? 0.35 : 1;
         ctx.fillStyle = PALETTE.slotDark;
         ctx.fillRect(x + 2, top + 2, SLOT_W - 4, FLOOR_H - 6);
         ctx.strokeStyle = '#22304a';
         ctx.setLineDash([4, 4]);
         ctx.strokeRect(x + 8, top + 8, SLOT_W - 16, FLOOR_H - 18);
         ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
       }
+    }
+    if (hintFloor) {
+      ctx.globalAlpha = 0.4;
+      ctx.font = FONT;
+      ctx.fillStyle = '#516a8a';
+      ctx.textAlign = 'center';
+      ctx.fillText('NEXT ROOM BUILDS HERE', WORLD_W / 2, top + FLOOR_H / 2);
+      ctx.textAlign = 'left';
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -72,16 +103,16 @@ function render() {
     ctx.fillRect(ELEV_X, floorTopY(f) + FLOOR_H - 4, ELEV_W, 4);
   }
 
-  // Build-mode hover ghost
-  if (G.buildType && G.hover) {
-    const slot = slotFromPoint(G.hover.x, G.hover.y);
-    if (slot) {
-      const free = !roomAt(slot.floor, slot.slot);
-      ctx.globalAlpha = 0.35;
-      ctx.fillStyle = free ? PALETTE.green : PALETTE.red;
-      ctx.fillRect(slotX(slot.slot) + 2, floorTopY(slot.floor) + 2, SLOT_W - 4, FLOOR_H - 6);
-      ctx.globalAlpha = 1;
-    }
+  // Fresh-build flash: highlight where the room just landed
+  if (G.buildFlash) {
+    const f = G.buildFlash;
+    const on = Math.floor(f.t * 8) % 2 === 0;
+    ctx.globalAlpha = on ? 0.9 : 0.4;
+    ctx.strokeStyle = PALETTE.green;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(slotX(f.slot) + 3, floorTopY(f.floor) + 3, SLOT_W - 6, FLOOR_H - 8);
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 1;
   }
 
   // Entities
@@ -151,7 +182,7 @@ function render() {
     drawSpeechBubble(hp.x, hp.y - 56, lines, dx, 1);
   }
 
-  // Selection highlight + hint
+  // Selection highlight (world space)
   if (G.selection) {
     const o = G.selection.obj;
     ctx.strokeStyle = PALETTE.green;
@@ -159,20 +190,9 @@ function render() {
     ctx.lineWidth = 2;
     ctx.strokeRect(o.x - 13, o.y - 34, 26, 40);
     ctx.globalAlpha = 1;
-    ctx.font = FONT;
-    ctx.fillStyle = PALETTE.green;
-    ctx.textAlign = 'center';
-    const hint = G.selection.kind === 'patient' ? 'CLICK A ROOM TO ALLOCATE' : 'CLICK A ROOM (OR LOBBY) TO ASSIGN';
-    ctx.fillText(hint, canvas.width / 2, 14);
-  }
-  if (G.buildType) {
-    ctx.font = FONT;
-    ctx.fillStyle = PALETTE.amber;
-    ctx.textAlign = 'center';
-    ctx.fillText(`CLICK AN EMPTY SLOT TO BUILD: ${ROOM_TYPES[G.buildType].name.toUpperCase()}`, canvas.width / 2, 14);
   }
 
-  // Floating texts
+  // Floating texts (world space)
   ctx.font = FONT;
   ctx.textAlign = 'center';
   for (const t of G.texts) {
@@ -181,6 +201,17 @@ function render() {
     ctx.fillStyle = t.color;
     ctx.fillText(t.text, Math.round(t.x), Math.round(t.y - frac * 16));
     ctx.globalAlpha = 1;
+  }
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);                      // ---- screen space ----
+
+  // Selection hint banner (screen space so it never scales)
+  if (G.selection) {
+    ctx.font = FONT;
+    ctx.fillStyle = PALETTE.green;
+    ctx.textAlign = 'center';
+    const hint = G.selection.kind === 'patient' ? 'CLICK A ROOM TO ALLOCATE' : 'CLICK A ROOM (OR LOBBY) TO ASSIGN';
+    ctx.fillText(hint, canvas.width / 2, 14);
   }
 
   ctx.textAlign = 'left';
@@ -332,7 +363,7 @@ function drawSpeechBubble(x, y, lines, dxLine, alpha = 1) {
   const all = dxLine ? [...lines, dxLine] : lines;
   const w = Math.max(...all.map(l => ctx.measureText(l).width)) + 12;
   const h = all.length * 11 + 9;
-  const bx = Math.round(Math.min(Math.max(6, x - w / 2), canvas.width - w - 6));
+  const bx = Math.round(Math.min(Math.max(6, x - w / 2), WORLD_W - w - 6));
   const by = Math.round(Math.max(4, y - h));
   ctx.globalAlpha = alpha;
   ctx.fillStyle = PALETTE.ink;

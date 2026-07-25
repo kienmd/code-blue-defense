@@ -6,9 +6,18 @@
  * place. Layout is in raw pixels (side-view building).
  * ============================================================ */
 
-/* ---------- Canvas + building layout ---------- */
-const CANVAS_W = 880;
+/* ---------- Canvas + world + camera ----------
+ * The WORLD (building layout) is 880px wide; the CANVAS is wider.
+ * The camera renders the world through a uniform scale+translate:
+ * a young hospital (few floors) is zoomed IN (up to CANVAS_W/WORLD_W),
+ * and the view eases out toward 1:1 as floors get built.
+ */
+const CANVAS_W = 1240;
 const CANVAS_H = 620;
+const WORLD_W  = 880;
+
+const ZOOM_MAX = CANVAS_W / WORLD_W;   // width-fit: never crop the building
+const ZOOM_EASE = 0.06;               // per-frame lerp toward target zoom
 
 const GROUND_Y   = 604;         // bottom of the ground floor
 const FLOOR_H    = 92;          // per-floor height
