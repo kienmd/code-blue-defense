@@ -34,7 +34,24 @@ function startRun() {
 }
 
 function freshShiftStats() {
-  return { helped: 0, transfers: 0, earned: 0, spent: 0, burnouts: 0, fastestCure: null, longestWait: 0 };
+  return { helped: 0, transfers: 0, earned: 0, spent: 0, burnouts: 0, fastestCure: null, longestWait: 0, diagCount: 0, diagTime: 0 };
+}
+
+/* Accumulate the finished shift into its era's bucket — the ERA REPORT
+ * popup quantifies era-over-era improvement from these. */
+function foldShiftIntoEraStats() {
+  const idx = ERAS.indexOf(eraForShift(G.shiftIdx));
+  const bucket = G.eraStats[idx] || (G.eraStats[idx] = {
+    shifts: 0, helped: 0, transfers: 0, burnouts: 0, earned: 0, diagCount: 0, diagTime: 0,
+  });
+  const st = G.shiftStats;
+  bucket.shifts++;
+  bucket.helped += st.helped;
+  bucket.transfers += st.transfers;
+  bucket.burnouts += st.burnouts;
+  bucket.earned += st.earned;
+  bucket.diagCount += st.diagCount;
+  bucket.diagTime += st.diagTime;
 }
 
 function startShift() {
@@ -206,9 +223,12 @@ function update(dt) {
   // Shift phases — cool-off is player-paced: no arrivals until the
   // player clicks START SHIFT (no auto-timer).
   if (G.phase === 'shift') {
-    G.shiftElapsed += dt;
-    while (G.schedule.length && G.schedule[0].t <= G.shiftElapsed) {
-      spawnPatient(G.schedule.shift().type);
+    // The decade card pauses the arrival clock — reading it is free.
+    if (!G.eraCard) {
+      G.shiftElapsed += dt;
+      while (G.schedule.length && G.schedule[0].t <= G.shiftElapsed) {
+        spawnPatient(G.schedule.shift().type);
+      }
     }
     if (!G.schedule.length && G.patients.length === 0) {
       if (G.shiftIdx >= SHIFTS.length - 1) { endRun(true); return; }

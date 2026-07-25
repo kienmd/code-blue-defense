@@ -21,6 +21,10 @@ canvas.addEventListener('mouseleave', () => { G.hover = null; });
 canvas.addEventListener('click', evt => {
   ensureAudio();
   if (G.state !== 'playing') return;
+
+  // Decade card up? First click skips it (arrivals resume).
+  if (G.eraCard) { G.eraCard = null; return; }
+
   const { x, y } = canvasPos(evt);
 
   // 1. Selection-driven assignment

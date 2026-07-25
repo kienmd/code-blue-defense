@@ -220,10 +220,11 @@ function render() {
   ctx.textAlign = 'left';
 }
 
-/* Age of War-style decade card: slides in from the left, holds,
- * fades out. Screen space, drawn over everything. */
+/* Age of War-style decade card: slides in from the left, SITS for
+ * several seconds (click to skip), fades out. Arrivals hold while
+ * it's up — reading it is never punished. Screen space. */
 function drawEraCard(card) {
-  const IN = 0.5, HOLD = 2.0;                              // + fade = ERA_CARD_SECONDS
+  const IN = 0.5, HOLD = ERA_CARD_HOLD;                    // + fade = ERA_CARD_SECONDS
   const t = card.t;
   const cx = canvas.width / 2, cy = canvas.height * 0.36;
   let slide = 0, alpha = 1;

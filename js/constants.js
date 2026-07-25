@@ -227,40 +227,131 @@ const UPGRADE_TYPES = {
   },
 };
 
-/* ---------- Eras (round-defining decade cards) ----------
- * Canonical shift->decade mapping from docs/ERAS.md: one decade per
- * shift from the 1950s, a doubled 2020s (shifts 8-9), 2030s finale.
+/* ---------- Eras (round-defining decades; docs/ERAS.md) ----------
+ * Canonical 15-shift march: one decade per shift from the 1950s,
+ * a doubled 2020s (shifts 8-9), then the predicted futures
+ * (2030s -> 2100) and the YEAR 3000 fantasy bonus round.
  * `startShift` is 0-based; lookup takes the last era whose
- * startShift <= shift. `inflation` is the economy knob reserved for
- * the tech-tree PR (docs/TECH_TREE.md) — stored, not yet applied.
+ * startShift <= shift.
+ *
+ * Per-era knobs (the "era baseline table" in docs/ERAS.md — free,
+ * universal, auto-applied the moment the era begins):
+ *   mods.diag   x on staff diagnosis seconds (lower = faster)
+ *   mods.stress x on staff stress gain
+ *   mods.treat  x on room treatment rate
+ *   mods.wait   ABSOLUTE waiting-room decay multiplier (replaces
+ *               DECAY_MULT.waiting; monitoring tech spots trouble sooner)
+ *   autoDiag / autoAssign: standard-of-care automation, free from
+ *               the 2030s / 2050s on (the Lab-Router purchase grants
+ *               both earlier)
+ *   inflation:  x on payouts AND room/staff costs — Age-of-War-style
+ *               number growth without rebalancing ratios
+ * Visual knobs: scrub (staff outfit), wall (room interior tint).
+ * Card copy: sub/body (canvas era card), tech/impact (ERA REPORT).
  */
 const ERAS = [
   { startShift: 0, label: '1950s', sign: 'EST. 1952', inflation: 0.5,
-    sub: 'THE MODERN HOSPITAL IS BORN', body: 'OPEN-HEART SURGERY! THE ICU! AND EVERY CHART IS PAPER.' },
+    mods: { diag: 1.6, stress: 1.25, treat: 1.0, wait: 1.3 },
+    scrub: '#e8ecec', wall: '#2b2519',
+    sub: 'THE MODERN HOSPITAL IS BORN', body: 'OPEN-HEART SURGERY! THE ICU! AND EVERY CHART IS PAPER.',
+    tech: ['1953 — HEART-LUNG MACHINE', '1953 — THE ICU IS INVENTED', '1955 — POLIO VACCINE AT SCALE'],
+    impact: 'IRON-LUNG WARDS EMPTY AS THE POLIO VACCINE SCALES NATIONWIDE.' },
   { startShift: 1, label: '1960s', sign: '1960s', inflation: 0.6,
-    sub: 'RESUSCITATION GETS ORGANIZED', body: 'CPR IS INVENTED. CRASH CARTS ROLL. CARDIAC PATIENTS GET THEIR OWN WARD.' },
+    mods: { diag: 1.5, stress: 1.2, treat: 1.0, wait: 1.3 },
+    scrub: '#dff0df', wall: '#243024',
+    sub: 'RESUSCITATION GETS ORGANIZED', body: 'CPR IS INVENTED. CRASH CARTS ROLL. CARDIAC PATIENTS GET THEIR OWN WARD.',
+    tech: ['1960 — CPR STANDARDIZED', '1962 — CORONARY CARE UNITS', '1965 — PORTABLE DEFIBRILLATOR'],
+    impact: 'IN-HOSPITAL HEART-ATTACK DEATHS DROP SHARPLY ONCE CARDIAC PATIENTS ARE MONITORED TOGETHER.' },
   { startShift: 2, label: '1970s', sign: '1970s', inflation: 0.7,
-    sub: 'THE CT SCANNER SEES ALL', body: 'CROSS-SECTION PICTURES OF A LIVING BRAIN. PARAMEDICS HIT THE STREETS.' },
+    mods: { diag: 1.35, stress: 1.2, treat: 1.05, wait: 1.3 },
+    scrub: '#4fb8a8', wall: '#2e2817',
+    sub: 'THE CT SCANNER SEES ALL', body: 'CROSS-SECTION PICTURES OF A LIVING BRAIN. PARAMEDICS HIT THE STREETS.',
+    tech: ['1971 — CT SCANNER', '1977 — FIRST HUMAN MRI', 'EARLY 70s — PARAMEDICS + 911'],
+    impact: 'THE AMBULANCE STOPS BEING A TAXI: TREATMENT NOW STARTS BEFORE THE DOOR.' },
   { startShift: 3, label: '1980s', sign: '1980s', inflation: 0.85,
-    sub: 'IMAGING GOES MAINSTREAM', body: 'MRI! KEYHOLE SURGERY! A PULSE-OX ON EVERY FINGER.' },
+    mods: { diag: 1.25, stress: 1.15, treat: 1.1, wait: 1.25 },
+    scrub: '#d8b0d8', wall: '#2e2c22',
+    sub: 'IMAGING GOES MAINSTREAM', body: 'MRI! KEYHOLE SURGERY! A PULSE-OX ON EVERY FINGER.',
+    tech: ['1984 — CLINICAL MRI CLEARED', '1985 — KEYHOLE SURGERY', '1983 — PULSE OXIMETERS'],
+    impact: 'ANESTHESIA DEATHS FALL ROUGHLY TENFOLD AFTER PULSE OXIMETRY.' },
   { startShift: 4, label: '1990s', sign: '1990s', inflation: 1.0,
-    sub: 'THE DIGITAL SEED', body: 'X-RAY FILM GOES FILMLESS. STENTS PROP ARTERIES OPEN.' },
+    mods: { diag: 1.15, stress: 1.1, treat: 1.15, wait: 1.25 },
+    scrub: '#68a8d8', wall: '#262b31',
+    sub: 'THE DIGITAL SEED', body: 'X-RAY FILM GOES FILMLESS. STENTS PROP ARTERIES OPEN.',
+    tech: ['1994 — CORONARY STENT APPROVED', '1990s — FILMLESS RADIOLOGY (PACS)', '1994 — FIRST SURGICAL ROBOT'],
+    impact: 'THE X-RAY LIGHTBOX RETIRES; IMAGES MOVE OVER NETWORKS.' },
   { startShift: 5, label: '2000s', sign: '2000s', inflation: 1.2,
-    sub: 'THE CHART GOES DIGITAL', body: 'UNCLE SAM PAYS HOSPITALS TO DITCH PAPER. E-PRESCRIBING KILLS THE FAX (ALMOST).' },
+    mods: { diag: 1.1, stress: 1.05, treat: 1.2, wait: 1.2 },
+    scrub: '#4a8ad0', wall: '#232c3a',
+    sub: 'THE CHART GOES DIGITAL', body: 'UNCLE SAM PAYS HOSPITALS TO DITCH PAPER. E-PRESCRIBING KILLS THE FAX (ALMOST).',
+    tech: ['2009 — HITECH ACT: EHR EVERYWHERE', '2001 — E-PRESCRIBING SCALES', '2000 — DA VINCI ROBOT APPROVED'],
+    impact: 'US HOSPITALS ON ELECTRONIC RECORDS: ~10% TO ~96% IN A DECADE.' },
   { startShift: 6, label: '2010s', sign: '2010s', inflation: 1.5,
-    sub: 'CONNECTED + QUANTIFIED', body: 'THE DOCTOR WILL SEE YOU NOW — ON VIDEO. AI READS ITS FIRST SCANS.' },
+    mods: { diag: 0.85, stress: 1.0, treat: 1.3, wait: 1.1 },
+    scrub: '#3a7ac8', wall: '#202c3e',
+    sub: 'CONNECTED + QUANTIFIED', body: 'THE DOCTOR WILL SEE YOU NOW — ON VIDEO. AI READS ITS FIRST SCANS.',
+    tech: ['2015 — TELEHEALTH AT SCALE', '2018 — FIRST AUTONOMOUS IMAGING AI', '2018 — ECG ON YOUR WRIST'],
+    impact: 'AI TAKES FIRST CALL IN RADIOLOGY; VITALS LEAVE THE BUILDING.' },
   { startShift: 7, label: '2020s', sign: '2020s', inflation: 1.8,
-    sub: 'THE AI DECADE', body: 'IT LISTENS, WRITES THE NOTE, FILES THE CLAIM. THE HOSPITAL MAKES HOUSE CALLS AGAIN.' },
-  { startShift: 9, label: '20??s', sign: '20??s', inflation: 2.2,
-    sub: 'THE AGENTIC WARD', body: 'AI RUNS THE FLOOR. HUMANS SUPERVISE. (WE\'RE GUESSING — YOU\'LL LIVE IT.)' },
+    mods: { diag: 0.7, stress: 0.85, treat: 1.4, wait: 1.0 },
+    scrub: '#3aa8a0', wall: '#1e3038',
+    sub: 'THE AI DECADE', body: 'IT LISTENS, WRITES THE NOTE, FILES THE CLAIM. THE HOSPITAL MAKES HOUSE CALLS AGAIN.',
+    tech: ['2020s — AMBIENT AI SCRIBES', '2020 — HOSPITAL-AT-HOME', '2023 — LLMs ENTER THE CLINIC'],
+    impact: 'FDA-CLEARED AI DEVICES PASS 1,000; 9 IN 10 SYSTEMS PILOT AI SCRIBES.' },
+  { startShift: 9, label: '2030s', sign: '2030s', inflation: 2.2, autoDiag: true,
+    mods: { diag: 0.5, stress: 0.75, treat: 1.5, wait: 0.95 },
+    scrub: '#7a68d8', wall: '#241f3e',
+    sub: 'THE AGENTIC WARD', body: 'AI READS INTAKE, ORDERS THE WORKUP, BOOKS THE BED. YOU SUPERVISE.',
+    tech: ['AGENTIC CARE ORCHESTRATION', 'THE SELF-MONITORING WARD', 'DIGITAL COMMAND CENTERS'],
+    impact: 'FORECAST: DETERIORATION FLAGGED HOURS EARLY; STANDARD CASES DIAGNOSE THEMSELVES.' },
+  { startShift: 10, label: '2040s', sign: '2040s', inflation: 2.8, autoDiag: true,
+    mods: { diag: 0.35, stress: 0.65, treat: 1.7, wait: 0.9 },
+    scrub: '#c8a040', wall: '#1e2f26',
+    sub: 'THE HOSPITAL LOSES ITS WALLS', body: 'DRONES RUN THE HALLS. HALF YOUR WARD IS IN PATIENTS\' BEDROOMS.',
+    tech: ['HOSPITAL-AT-HOME BY DEFAULT', 'AUTONOMOUS DRONE LOGISTICS', 'FIRST BIOPRINTED ORGANS'],
+    impact: 'FORECAST: PRINTED HEART VALVES IN TRIALS; ORGAN COST HEADS UNDER $50K.' },
+  { startShift: 11, label: '2050s', sign: '2050s', inflation: 3.5, autoDiag: true, autoAssign: true,
+    mods: { diag: 0.25, stress: 0.55, treat: 1.9, wait: 0.85 },
+    scrub: '#48c8c8', wall: '#1a2c33',
+    sub: 'REPAIR, DON\'T REPLACE', body: 'NANOBOTS CARRY THE MEDICINE. GENES GET SPELL-CHECKED.',
+    tech: ['NANOMEDICINE AT THE BEDSIDE', 'BIOPRINTED ORGANS TO ORDER', 'DRAG-AND-DROP GENE EDITING'],
+    impact: 'FORECAST: THE TRANSPLANT WAITLIST ENDS — ORGANS PRINT TO ORDER.' },
+  { startShift: 12, label: '2075', sign: '2075', inflation: 5.0, autoDiag: true, autoAssign: true,
+    mods: { diag: 0.15, stress: 0.45, treat: 2.2, wait: 0.8 },
+    scrub: '#b8bcd0', wall: '#281f38',
+    sub: 'THE BODY SHOP', body: 'ORGANS REGROW IN PLACE. SWARMS PATROL YOUR BLOOD. AGING FILES AN APPEAL.',
+    tech: ['IN-SITU REGENERATION', 'NANOBOT IMMUNE PATROLS', 'AGE-REVERSAL THERAPIES'],
+    impact: 'SPECULATION: AI PHYSICIANS RUN STANDARD CARE; HUMANS OWN THE EXCEPTIONS.' },
+  { startShift: 13, label: '2100', sign: '2100', inflation: 7.0, autoDiag: true, autoAssign: true,
+    mods: { diag: 0.1, stress: 0.35, treat: 2.5, wait: 0.7 },
+    scrub: '#e8d8a0', wall: '#2d2a1e',
+    sub: 'MEDICINE IS INFRASTRUCTURE', body: 'ILLNESS IS CAUGHT BEFORE IT\'S FELT. MOSTLY, THE HOSPITAL HUMS.',
+    tech: ['PRE-SYMPTOM DISEASE INTERCEPTION', 'FULL-BODY DIGITAL TWINS', 'CLINICAL LONGEVITY'],
+    impact: 'SPECULATION: THE CENTURY-OLD PATIENT IS UNREMARKABLE.' },
+  { startShift: 14, label: 'Y3K', sign: 'Y3K', inflation: 10, autoDiag: true, autoAssign: true,
+    mods: { diag: 0.05, stress: 0.1, treat: 5.0, wait: 0.5 },
+    scrub: '#c858e8', wall: '#150e2e',
+    sub: 'YEAR 3000 — TOTAL CARE', body: 'REGENERATION PODS. TELEPORT TRIAGE. ONE HUMAN REMAINS ON STAFF: YOU.',
+    tech: ['FULL-BODY REGENERATION PODS', 'NANOBOT IMMUNE SWARMS', 'MATTER-STREAM TRIAGE'],
+    impact: '100% CERTIFIED FANTASY. ENJOY THE VICTORY LAP.' },
 ];
 function eraForShift(i) {
   let era = ERAS[0];
   for (const e of ERAS) { if (e.startShift <= i) era = e; }
   return era;
 }
+/* Era in force right now (pre-run and shift-1 cool-off count as the 1950s). */
+function currentEra() {
+  const idx = (typeof G !== 'undefined' && G.shiftIdx >= 0) ? G.shiftIdx : 0;
+  return eraForShift(idx);
+}
+/* Age-of-War inflation on room/staff prices, rounded to $5. */
+function inflatedCost(base) {
+  return Math.max(5, Math.round(base * currentEra().inflation / 5) * 5);
+}
 
-const ERA_CARD_SECONDS = 3.2;   // slide in, hold, fade out
+const ERA_CARD_SECONDS = 5.4;   // slide in (0.5) + HOLD (4.0) + fade (0.9)
+const ERA_CARD_HOLD = 4.0;      // let the decade SIT — a click skips it
 
 /* ---------- Run structure ---------- */
 const START_BUDGET = 600;
