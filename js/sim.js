@@ -21,6 +21,12 @@ function startRun() {
   G.phase = 'cooloff';              // player-paced: build + hire, then click START
   G.schedule = [];
   G.shiftStats = freshShiftStats();
+  G.eraStats = {};
+  G.pendingEraReport = null;
+  G.accountsPayable = 0;
+  G.bailouts = 0;
+  G.privateWingArmed = false;
+  G.privateWingActive = false;
   G.selection = null;
   G.texts = [];
   G.particles = [];
@@ -34,7 +40,43 @@ function startRun() {
 }
 
 function freshShiftStats() {
-  return { helped: 0, transfers: 0, earned: 0, spent: 0, burnouts: 0, fastestCure: null, longestWait: 0, diagCount: 0, diagTime: 0 };
+  return {
+    helped: 0, transfers: 0, burnouts: 0,
+    fastestCure: null, longestWait: 0, diagCount: 0, diagTime: 0,
+    // ledger (docs/ECONOMY.md 3d.6) — faucets above the line, drains below
+    earned: 0,          // case reimbursements (outcome-scaled)
+    copays: 0, grant: 0,
+    spent: 0,           // builds / hires / tech this shift
+    salaries: 0, upkeep: 0, penalties: 0, apPrior: 0, apCarried: 0,
+  };
+}
+
+/* Soft debt (ECONOMY.md rail 4): charges never push budget below $0 —
+ * the shortfall carries as ACCOUNTS PAYABLE against the next settle. */
+function chargeSoft(amount) {
+  const paid = Math.min(G.budget, amount);
+  G.budget -= paid;
+  G.accountsPayable += amount - paid;
+}
+
+/* End-of-shift settle: salaries + upkeep + prior accounts payable. */
+function settleLedger() {
+  const st = G.shiftStats;
+  const infl = currentEra().inflation;
+  st.salaries = G.staffList.reduce((sum, s) => sum + Math.round(s.def.salary * infl), 0);
+  st.upkeep = G.rooms.reduce((sum, r) => sum + Math.round(r.def.cost * UPKEEP_RATE * infl), 0);
+  st.apPrior = G.accountsPayable;
+  G.accountsPayable = 0;
+  chargeSoft(st.salaries + st.upkeep + st.apPrior);
+  st.apCarried = G.accountsPayable;
+
+  // County bailout (rail 3): never stranded below one hire. First is
+  // free; each subsequent one dings the end-of-run star rating.
+  if (G.budget < Math.round(BAILOUT_TRIGGER * infl)) {
+    G.budget = Math.max(G.budget, Math.round(BAILOUT_FLOOR * infl));
+    G.bailouts++;
+    showBanner(`COUNTY BAILOUT ${G.bailouts > 1 ? '(STAR PENALTY)' : '(FIRST IS FREE)'}<br/>BUDGET TOPPED UP TO ${fmtMoney(G.budget)}`, 'alert', 4);
+  }
 }
 
 /* Accumulate the finished shift into its era's bucket — the ERA REPORT
@@ -49,7 +91,8 @@ function foldShiftIntoEraStats() {
   bucket.helped += st.helped;
   bucket.transfers += st.transfers;
   bucket.burnouts += st.burnouts;
-  bucket.earned += st.earned;
+  bucket.earned += st.earned + st.copays + st.grant;
+  bucket.drained = (bucket.drained || 0) + st.salaries + st.upkeep + st.penalties;
   bucket.diagCount += st.diagCount;
   bucket.diagTime += st.diagTime;
 }
@@ -71,6 +114,13 @@ function startShift() {
   });
   G.schedule.sort((a, b) => a.t - b.t);
 
+  // Private-wing contract: armed in cool-off, in force for THIS shift.
+  G.privateWingActive = G.privateWingArmed;
+  G.privateWingArmed = false;
+  if (G.privateWingActive) {
+    showBanner('PRIVATE WING CONTRACT ACTIVE<br/>PAYOUTS x1.3 — ICU TRANSFERS COST A SETTLEMENT', 'alert', 4);
+  }
+
   // Era title card defines the round (docs/ERAS.md decade march).
   // Only sweep it when the decade CHANGES (the 2020s span two shifts).
   const era = eraForShift(G.shiftIdx);
@@ -79,17 +129,29 @@ function startShift() {
     G.eraCard = { t: 0, label: era.label, sub: era.sub, body: era.body };
     G.sfx('era');
     narrate(`era_${era.label}`, { always: true });
+    // Era modernization grant (ECONOMY.md 3a): inverse-performance
+    // catch-up faucet — Hill-Burton / HITECH flavored, capped gently.
+    if (G.shiftIdx > 0) {
+      const livesLost = START_LIVES - G.lives;
+      const grant = Math.round(ERA_GRANT_BASE * era.inflation * (1 + 0.5 * livesLost / START_LIVES));
+      G.budget += grant;
+      G.shiftStats.grant += grant;
+      G.addText(WORLD_W / 2, floorTopY(1) - 20, `MODERNIZATION GRANT +${fmtMoney(grant)}`, PALETTE.amber, 3);
+    }
   }
   if (G.shiftIdx === SHIFTS.length - 1) narrate('finalShift');
   if (shift.banner) { showBanner(shift.banner, 'alert', 3); G.sfx('siren'); }
 }
 
 function endRun(won) {
+  if (won) foldShiftIntoEraStats();          // bank the final shift
   G.state = won ? 'won' : 'lost';
   G.selection = null;
   let stars = 0;
   if (won) {
     stars = G.transfers === 0 ? 3 : (G.transfers <= 2 ? 2 : 1);
+    // County bailouts past the first free one ding the rating (rail 3).
+    stars = Math.max(1, stars - Math.max(0, G.bailouts - 1));
     setBest(stars, G.discharged);
   }
   showResult(won, stars);
@@ -100,9 +162,17 @@ function endRun(won) {
 
 function endShift() {
   // Round over: show the SHIFT REPORT, then hold in player-paced
-  // cool-off until they click START SHIFT N+1.
+  // cool-off until they click START SHIFT N+1. If the next shift
+  // changes decade, a mandatory ERA REPORT gates the transition
+  // (main.js shows it when the shift report is dismissed).
   G.phase = 'cooloff';
   G.selection = null;
+  G.privateWingActive = false;
+  settleLedger();                   // salaries + upkeep + accounts payable
+  foldShiftIntoEraStats();
+  const cur = eraForShift(G.shiftIdx);
+  const next = G.shiftIdx + 1 < SHIFTS.length ? eraForShift(G.shiftIdx + 1) : null;
+  G.pendingEraReport = (next && next !== cur) ? next : null;
   showShiftReport();
   refreshShiftButton();
   refreshShop();
@@ -121,14 +191,22 @@ function spawnPatient(type) {
   G.patients.push(p);
   narrate('firstPatient');
 
+  // Walk-in copay (ECONOMY.md): the income floor — a shift never grosses $0.
+  const copay = Math.round(COPAY * currentEra().inflation);
+  G.budget += copay;
+  G.shiftStats.copays += copay;
+
   // Presenting complaint: fire-and-forget flavor (LLM or canned table).
   generateComplaint(p).then(line => { if (!p.outcome) p.complaint = line; });
 
-  // AGENTIC LAB-ROUTER: instant AI diagnosis on arrival.
-  if (G.upgrades.labRouter) {
+  // AGENTIC LAB-ROUTER (or the free 2030s+ era baseline):
+  // instant AI diagnosis on arrival.
+  if (G.upgrades.labRouter || currentEra().autoDiag) {
     simulateAgenticDecision(p).then(decision => {
       if (p.outcome || p.diagnosed) return;
       p.diagnosed = true;
+      G.shiftStats.diagCount++;
+      G.shiftStats.diagTime += G.time - p.spawnT;
       p.aiTag = decision;
       G.addText(p.x, p.y - 34, `AI P${decision.priority}: ${decision.category}`, PALETTE.toxic, 1.8);
       G.sfx('diagnose');
@@ -165,6 +243,13 @@ function assignStaff(staff, dest) {
   staff.diagT = 0;
 
   if (dest === 'lobby') {
+    // "Not everyone can diagnose": lobby duty needs a clinical
+    // diagnostician OR a lobby role of its own (orderly calming).
+    if (!staff.def.canDiagnose && !staff.def.lobbyCalm) {
+      G.sfx('denied');
+      G.addText(staff.x, staff.y - 36, "CAN'T DIAGNOSE", PALETTE.amber, 1.4);
+      return false;
+    }
     if (lobbyStaff().length >= 3) { G.sfx('denied'); return false; }
     staff.room = 'lobby';
     staff.state = 'walking';
@@ -184,9 +269,10 @@ function assignStaff(staff, dest) {
 
 function hireStaff(typeKey) {
   const def = STAFF_TYPES[typeKey];
-  if (G.budget < def.cost) { G.sfx('denied'); return; }
-  G.budget -= def.cost;
-  G.shiftStats.spent += def.cost;
+  const cost = inflatedCost(def.cost);
+  if (G.budget < cost) { G.sfx('denied'); return; }
+  G.budget -= cost;
+  G.shiftStats.spent += cost;
   const s = new Staff(typeKey);
   s.x = -20; s.y = floorWalkY(0);
   s.state = 'walking';
@@ -201,12 +287,14 @@ function hireStaff(typeKey) {
 function buildRoom(typeKey) {
   // Fallout Shelter-style: no slot picking. The room lands in the
   // next open slot (floor 1 fills left-to-right, then floor 2, …).
+  // Repeat copies of the same type cost x1.5 each (anti-spam).
   const def = ROOM_TYPES[typeKey];
-  if (G.budget < def.cost) { G.sfx('denied'); return; }
+  const cost = roomBuildCost(typeKey);
+  if (G.budget < cost) { G.sfx('denied'); return; }
   const slot = nextBuildSlot();
   if (!slot) { G.sfx('denied'); G.addText(WORLD_W / 2, floorTopY(NUM_FLOORS - 1) + 30, 'HOSPITAL FULL', PALETTE.amber, 1.6); return; }
-  G.budget -= def.cost;
-  G.shiftStats.spent += def.cost;
+  G.budget -= cost;
+  G.shiftStats.spent += cost;
   const r = new Room(typeKey, slot.floor, slot.slot);
   G.rooms.push(r);
   G.buildFlash = { floor: slot.floor, slot: slot.slot, t: 0 };
@@ -317,8 +405,14 @@ function updatePatients(dt) {
 
 function dischargePatient(p) {
   // The germ pops; the patient celebrates and walks out. THE win moment.
-  const mult = G.upgrades.priorAuth ? UPGRADE_TYPES.priorAuth.payoutMult : 1;
-  const pay = Math.round(p.def.payout * mult);
+  // Billed charges x outcome multiplier ("no chart, no charge" —
+  // ECONOMY.md 3a) x Prior-Auth x private-wing x the decade's inflation.
+  const outcome = !p.diagnosed ? 'undiagnosed'
+    : (p.room && p.room.treats(p.typeKey)) ? 'right' : 'wrong';
+  let mult = PAYOUT_OUTCOME_MULT[outcome];
+  if (G.upgrades.priorAuth) mult *= UPGRADE_TYPES.priorAuth.payoutMult;
+  if (G.privateWingActive) mult *= PRIVATE_WING.payoutMult;
+  const pay = Math.round(p.def.payout * mult * currentEra().inflation);
   G.budget += pay;
   G.shiftStats.earned += pay;
   const cureT = G.time - p.spawnT;
@@ -327,7 +421,7 @@ function dischargePatient(p) {
   p.state = 'exiting';
   p.complexity = 0;
   p.path = pathFrom(p, -30, 0);
-  G.addText(p.x, p.y - 34, `CURED! +$${pay}`, PALETTE.green, 1.6);
+  G.addText(p.x, p.y - 34, `CURED! +${fmtMoney(pay)}`, PALETTE.green, 1.6);
   burstConfetti(p.x, p.y - 20);
   G.sfx('discharge');
   narrate('firstDischarge');
@@ -343,6 +437,14 @@ function transferPatient(p) {
   p.state = 'transfer';
   p.transferT = 1.4;
   G.addText(p.x, p.y - 34, 'ICU TRANSFER', PALETTE.brightRed, 2);
+  // Private wing: the ONLY place a lost life ever costs money — and
+  // the player opted in (ECONOMY.md risk lever / rail 5).
+  if (G.privateWingActive) {
+    const penalty = Math.round(PRIVATE_WING.icuPenalty * currentEra().inflation);
+    chargeSoft(penalty);
+    G.shiftStats.penalties += penalty;
+    G.addText(p.x, p.y - 48, `SETTLEMENT -${fmtMoney(penalty)}`, PALETTE.amber, 2);
+  }
   G.sfx('transfer');
   narrate('firstTransfer');
 }
@@ -357,8 +459,10 @@ function updateStaff(dt) {
     if (s.isBurnedOut(G.time)) continue;
 
     let working = false;
-    if (s.room === 'lobby') {
+    if (s.room === 'lobby' && s.def.canDiagnose) {
       // Triage: diagnose the longest-waiting undiagnosed patient.
+      // (Non-diagnosticians in the lobby — orderlies — never pick up
+      // diag tasks; their calming effect is passive in decayMult.)
       if (!s.diagPatient || s.diagPatient.outcome || s.diagPatient.state !== 'waiting' || s.diagPatient.diagnosed) {
         s.diagPatient = waitingPatients().find(p =>
           !p.diagnosed && !G.staffList.some(o => o !== s && o.diagPatient === p)) || null;
@@ -367,10 +471,13 @@ function updateStaff(dt) {
       if (s.diagPatient) {
         working = true;
         s.diagT += dt;
-        if (s.diagT >= s.def.diagSeconds) {
+        // Era baseline: better diagnostics each decade (docs/ERAS.md).
+        if (s.diagT >= s.def.diagSeconds * currentEra().mods.diag) {
           const p = s.diagPatient;
           p.diagnosed = true;
-          G.addText(p.x, p.y - 34, `DIAGNOSED: ${p.def.name.toUpperCase()}`, PALETTE.blue, 1.6);
+          G.shiftStats.diagCount++;
+          G.shiftStats.diagTime += G.time - p.spawnT;
+          G.addText(p.x, p.y - 34, `${s.def.diagLabel}: ${p.def.name.toUpperCase()}`, PALETTE.blue, 1.6);
           G.sfx('diagnose');
           narrate('firstDiagnosis');
           s.diagPatient = null;
@@ -382,7 +489,7 @@ function updateStaff(dt) {
     }
 
     if (working) {
-      s.stress = Math.min(100, s.stress + s.stressGain() * dt);
+      s.stress = Math.min(100, s.stress + s.stressGain() * currentEra().mods.stress * dt);
       if (s.stress >= 100) {
         s.burnoutUntil = G.time + BURNOUT_SECONDS;
         s.stress = 0;
@@ -405,8 +512,9 @@ function updateRooms(dt) {
     if (!occupied.length) continue;
     const staffRate = r.staff
       .filter(s => s.state === 'working' && !s.isBurnedOut(G.time))
-      .reduce((sum, s) => sum + s.rate(), 0);
-    const perBed = (ROOM_BASE_RATE + staffRate) / occupied.length;
+      .reduce((sum, s) => sum + s.rate(r), 0);
+    // Era baseline: standard-of-care treatment improves each decade.
+    const perBed = (ROOM_BASE_RATE + staffRate) * currentEra().mods.treat / occupied.length;
     for (const p of occupied) {
       let mult = 1;
       if (!p.diagnosed) mult = UNDIAGNOSED_MULT;
@@ -446,7 +554,8 @@ function updateContagion(dt) {
 }
 
 function updateAutoAssign(dt) {
-  if (!G.upgrades.labRouter) return;
+  // Lab-Router purchase, or free from the 2050s era baseline on.
+  if (!G.upgrades.labRouter && !currentEra().autoAssign) return;
   G.autoAssignTimer -= dt;
   if (G.autoAssignTimer > 0) return;
   G.autoAssignTimer = AUTO_ASSIGN_PERIOD;

@@ -80,7 +80,14 @@ class Patient {
   floor() { return this.room ? this.room.floor : 0; }
 
   decayMult() {
-    if (this.state === 'waiting' || this.state === 'arriving') return DECAY_MULT.waiting;
+    if (this.state === 'waiting' || this.state === 'arriving') {
+      // Era baseline (monitoring tech spots trouble sooner) softened
+      // further by orderlies posted on lobby duty.
+      let m = currentEra().mods.wait;
+      const calm = lobbyStaff().filter(s => s.typeKey === 'orderly' && !s.isBurnedOut(G.time)).length;
+      for (let i = 0; i < Math.min(ORDERLY_LOBBY_CAP, calm); i++) m *= STAFF_TYPES.orderly.lobbyCalm;
+      return m;
+    }
     if (this.state === 'inBed') {
       return (this.diagnosed && this.room.treats(this.typeKey)) ? DECAY_MULT.rightBed : DECAY_MULT.wrongBed;
     }
@@ -114,7 +121,15 @@ class Staff {
 
   isBurnedOut(time) { return time < this.burnoutUntil; }
 
-  rate() { return this.def.treatRate * (this.scribe ? UPGRADE_TYPES.scribe.rateMult : 1); }
+  /* Treat rate in `room` (optional): scribe multiplier, then the
+   * specialist curve — a Surgeon is x1.8 in Surgery, x0.5 anywhere else. */
+  rate(room) {
+    let r = this.def.treatRate * (this.scribe ? UPGRADE_TYPES.scribe.rateMult : 1);
+    if (this.def.specialty && room) {
+      r *= room.typeKey === this.def.specialty ? this.def.specialtyMult : this.def.offSpecialtyMult;
+    }
+    return r;
+  }
 
   stressGain() { return this.def.stressPerSec * (this.scribe ? UPGRADE_TYPES.scribe.stressMult : 1); }
 }
@@ -249,22 +264,41 @@ function drawPresentingTell(ctx, typeKey, t, look = DEFAULT_LOOK) {
   }
 }
 
-function drawStaffSprite(ctx, typeKey, cx, cy, bobPhase = 0) {
+/* `outfit` overrides the scrub color — render.js passes the current
+ * era's palette so uniforms march through the decades (1950s whites
+ * -> teal 70s scrubs -> future bodysuits). */
+function drawStaffSprite(ctx, typeKey, cx, cy, bobPhase = 0, outfit = null) {
   const bob = Math.round(Math.sin(bobPhase) * 1);
+  const scrub = outfit || '#7fd4e8';
   ctx.save();
   ctx.translate(Math.round(cx), Math.round(cy + bob));
   if (typeKey === 'nurse') {
     ctx.fillStyle = '#f2b8a0'; ctx.fillRect(-4, -20, 8, 6);            // head
     ctx.fillStyle = PALETTE.white; ctx.fillRect(-5, -23, 10, 4);       // cap
     ctx.fillStyle = PALETTE.red; ctx.fillRect(-1, -23, 2, 4);          // cap cross
-    ctx.fillStyle = '#7fd4e8'; ctx.fillRect(-6, -14, 12, 12);          // scrubs
+    ctx.fillStyle = scrub; ctx.fillRect(-6, -14, 12, 12);              // scrubs
     ctx.fillStyle = PALETTE.white; ctx.fillRect(-2, -12, 4, 6);        // apron
+    ctx.fillStyle = PALETTE.ink; ctx.fillRect(-4, -2, 3, 2); ctx.fillRect(1, -2, 3, 2);
+  } else if (typeKey === 'surgeon') {
+    ctx.fillStyle = '#e0c8a8'; ctx.fillRect(-4, -20, 8, 6);            // head
+    ctx.fillStyle = scrub; ctx.fillRect(-5, -23, 10, 4);               // scrub cap
+    ctx.fillStyle = '#dfe8ec'; ctx.fillRect(-4, -17, 8, 3);            // surgical mask
+    ctx.fillStyle = scrub; ctx.fillRect(-6, -14, 12, 12);              // gown
+    ctx.fillStyle = '#2f8f6f'; ctx.fillRect(-6, -14, 12, 2);           // gown yoke
+    ctx.fillStyle = '#f2d8b8'; ctx.fillRect(-8, -10, 2, 4); ctx.fillRect(6, -10, 2, 4); // gloves up
+    ctx.fillStyle = PALETTE.ink; ctx.fillRect(-4, -2, 3, 2); ctx.fillRect(1, -2, 3, 2);
+  } else if (typeKey === 'orderly') {
+    ctx.fillStyle = '#d8a878'; ctx.fillRect(-4, -20, 8, 6);            // head
+    ctx.fillStyle = '#3a3a44'; ctx.fillRect(-5, -22, 10, 3);           // hair
+    ctx.fillStyle = '#8a94a4'; ctx.fillRect(-6, -14, 12, 12);          // grey uniform
+    ctx.fillStyle = '#59616e'; ctx.fillRect(-6, -8, 12, 2);            // belt
+    ctx.fillStyle = PALETTE.white; ctx.fillRect(2, -13, 3, 3);         // badge
     ctx.fillStyle = PALETTE.ink; ctx.fillRect(-4, -2, 3, 2); ctx.fillRect(1, -2, 3, 2);
   } else {
     ctx.fillStyle = '#e8b088'; ctx.fillRect(-4, -20, 8, 6);            // head
     ctx.fillStyle = '#5a4632'; ctx.fillRect(-5, -22, 10, 3);           // hair
     ctx.fillStyle = PALETTE.white; ctx.fillRect(-7, -14, 14, 13);      // lab coat
-    ctx.fillStyle = '#7fd4e8'; ctx.fillRect(-2, -14, 4, 7);            // shirt
+    ctx.fillStyle = scrub; ctx.fillRect(-2, -14, 4, 7);                // shirt
     ctx.fillStyle = PALETTE.ink;                                        // stethoscope
     ctx.fillRect(-2, -13, 1, 6); ctx.fillRect(1, -13, 1, 6); ctx.fillRect(-1, -8, 2, 2);
     ctx.fillStyle = PALETTE.ink; ctx.fillRect(-4, -1, 3, 2); ctx.fillRect(1, -1, 3, 2);

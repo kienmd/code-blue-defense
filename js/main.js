@@ -3,10 +3,22 @@
  * buttons and exposes the debug hook. Must load last.
  * ============================================================ */
 
-el.btnStart.addEventListener('click', () => { ensureAudio(); G.sfx('buy'); stopMusic(); startRun(); });
-el.btnRetry.addEventListener('click', () => { ensureAudio(); stopMusic(); startRun(); });
-el.btnMenu.addEventListener('click', () => { showMenu(); startMusic(); });
+/* Pre-game the topbar stats + shop are hidden (clean title screen);
+ * the hospital reveals after START. */
+function setPregame(on) { document.body.classList.toggle('pregame', on); }
+setPregame(true);
+
+el.btnStart.addEventListener('click', () => { ensureAudio(); G.sfx('buy'); stopMusic(); setPregame(false); startRun(); });
+el.btnRetry.addEventListener('click', () => { ensureAudio(); stopMusic(); setPregame(false); startRun(); });
+el.btnMenu.addEventListener('click', () => { showMenu(); startMusic(); setPregame(true); });
 el.btnShift.addEventListener('click', () => { ensureAudio(); G.sfx('buy'); startShift(); });
+// Private-wing risk lever: arm during cool-off, applies to the next shift.
+el.btnWing.addEventListener('click', () => {
+  ensureAudio();
+  G.privateWingArmed = !G.privateWingArmed;
+  G.sfx(G.privateWingArmed ? 'buy' : 'denied');
+  refreshShiftButton();
+});
 el.btnNextShift.addEventListener('click', () => { ensureAudio(); G.sfx('buy'); startShift(); });
 el.btnKeepBuilding.addEventListener('click', () => {
   el.report.classList.add('hidden');
@@ -34,6 +46,16 @@ el.btnMute.addEventListener('click', () => {
   refreshMuteButton();
 });
 refreshMuteButton();
+
+/* VOICE: cycle through the available narrator system voices. */
+el.btnVoice.addEventListener('click', () => {
+  const name = cycleNarratorVoice();
+  if (!name) { showBanner('NO SYSTEM VOICES AVAILABLE', 'info', 2); return; }
+  el.btnVoice.title = `Narrator voice: ${name}`;
+  showBanner(`NARRATOR VOICE: ${name.toUpperCase()}`, 'info', 2.5);
+  try { speechSynthesis.cancel(); } catch (_) { /* ignore */ }
+  speakWithSynthesis('Testing, testing. This hospital is in capable hands.');
+});
 
 /* Intro EKG: scrolling pixel heartbeat trace. */
 function drawEkg(time) {

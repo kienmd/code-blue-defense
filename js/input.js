@@ -105,26 +105,27 @@ window.addEventListener('mouseup', evt => {
 
 function dropUpgrade(key, px, py) {
   const def = UPGRADE_TYPES[key];
-  if (G.budget < def.cost) { G.sfx('denied'); return; }
+  const cost = inflatedCost(def.cost);
+  if (G.budget < cost) { G.sfx('denied'); return; }
   if (def.target === 'staff') {
     const s = hitStaff(px, py);
     if (!s) { G.addText(px, py, 'DROP ON A STAFF MEMBER', PALETTE.amber, 1.2); G.sfx('denied'); return; }
     if (s.scribe) { G.addText(px, py, 'ALREADY HAS A SCRIBE', PALETTE.amber, 1.2); G.sfx('denied'); return; }
     s.scribe = true;
-    G.budget -= def.cost;
+    G.budget -= cost;
     G.addText(s.x, s.y - 40, 'AI SCRIBE ONLINE', PALETTE.toxic, 1.5);
   } else if (def.target === 'lobby') {
     if (G.upgrades.labRouter || !inLobby(px, py)) { G.sfx('denied'); if (!G.upgrades.labRouter) G.addText(px, py, 'DROP ON THE LOBBY', PALETTE.amber, 1.2); return; }
     G.upgrades.labRouter = true;
-    G.budget -= def.cost;
+    G.budget -= cost;
     G.addText(400, floorWalkY(0) - 50, 'LAB-ROUTER ONLINE: AUTO-TRIAGE ACTIVE', PALETTE.toxic, 2);
   } else if (def.target === 'exit') {
     if (G.upgrades.priorAuth || !inEntrance(px, py)) { G.sfx('denied'); if (!G.upgrades.priorAuth) G.addText(px, py, 'DROP ON THE ENTRANCE DOOR', PALETTE.amber, 1.2); return; }
     G.upgrades.priorAuth = true;
-    G.budget -= def.cost;
+    G.budget -= cost;
     G.addText(120, floorWalkY(0) - 50, 'PRIOR-AUTH AGENT ONLINE', PALETTE.toxic, 2);
   }
-  G.shiftStats.spent += def.cost;
+  G.shiftStats.spent += cost;
   G.sfx('buy');
   refreshShop();
 }

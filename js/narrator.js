@@ -3,11 +3,12 @@
  * player through the night. Nature-documentary gravitas, ER chaos.
  *
  * Voice policy (by design, not fallback): the browser's built-in
- * en-GB speechSynthesis voice, pinned so it never changes accents
- * between sessions, with always-on subtitles. Free, offline, and
- * reliably funny. An ElevenLabs TTS tier exists below as a disabled
- * seam (NARRATOR_TTS_ENABLED) — a possible future upgrade; no key
- * is wired anywhere.
+ * speechSynthesis with the natural en-US system voice as default,
+ * pinned in localStorage; the topbar VOICE button cycles the best
+ * few available voices so the player picks their favorite. Always-on
+ * subtitles. An ElevenLabs TTS tier exists below as a disabled seam
+ * (NARRATOR_TTS_ENABLED) — a possible future upgrade; no key is
+ * wired anywhere.
  * ============================================================ */
 
 const NARRATOR_TTS_ENABLED = false;                   // ElevenLabs seam: off by design
@@ -27,16 +28,20 @@ const NARRATION = {
   finalShift:     "The final shift. History will remember what you do next.",
   win:            "All shifts complete. Simply magnificent. The board sends its regards.",
   lose:           "The intensive care unit is full. A sombre night. Even the finest hospitals have them.",
-  // Era transitions — always spoken, one per decade.
+  // Era transitions — always spoken, one per era (keys match ERAS labels).
   'era_1950s':    "The nineteen-fifties. Paper charts, starched caps, and surgeons with remarkable confidence.",
   'era_1960s':    "The sixties. We have learned to restart a heart. The crash cart is practically a member of staff.",
-  'era_1970s':    "The seventies. The CT scanner sees all — and the paramedics have splendid sideburns.",
-  'era_1980s':    "The eighties. Machines that go beep, on every finger. Progress has a soundtrack now.",
+  'era_1970s-80s': "The seventies and eighties. The CT scanner sees all, machines beep on every finger, and the paramedics have splendid sideburns.",
   'era_1990s':    "The nineties. X-ray film is retiring, and something called an electronic record is being attempted.",
   'era_2000s':    "The new millennium. The chart has gone digital. The fax machine remains, out of spite.",
   'era_2010s':    "The twenty-tens. The doctor will see you now — on video. The machines have started reading the scans.",
   'era_2020s':    "The A.I. decade. It listens, it writes the note, it files the claim. I confess a certain professional envy.",
-  'era_20??s':    "The future. The agents run the floor, and the humans supervise. We are, all of us, guessing.",
+  'era_2030s':    "The twenty-thirties. The agents run the floor, and the humans supervise. We are, all of us, guessing.",
+  'era_2040s':    "The twenty-forties. The hospital has lost its walls. The drones, I am told, do not unionize.",
+  'era_2050s':    "The twenty-fifties. Organs printed to order, genes spell-checked. Repair, not replace.",
+  'era_2075':     "Twenty-seventy-five. The body shop. Aging has filed an appeal, and lost.",
+  'era_2100':     "The year twenty-one hundred. Medicine is infrastructure. Mostly, the hospital hums.",
+  'era_Y3K':      "The year three thousand. Certified fantasy, total care. One human remains on staff. It appears to be you.",
 };
 
 /* ---------- State ---------- */
@@ -141,45 +146,72 @@ function playClip(url) {
   });
 }
 
-/* The en-GB backup voice is a FEATURE, not just a fallback — pin one
- * deterministic choice so the narrator doesn't change accents between
- * sessions. Preference order, then pin the winner's name in
- * localStorage; re-derive only if that voice disappears. */
-const GB_VOICE_PREFERENCE = [/^daniel/i, /^arthur/i, /^george/i, /serena/i, /^kate/i, /uk english male/i];
+/* Voice policy: default to the natural en-US system voice (the user
+ * prefers it over the en-GB one), pinned in localStorage so it never
+ * changes between sessions. A VOICE button in the topbar cycles
+ * through the best few available system voices — the player picks
+ * their favorite themselves. */
+const VOICE_PREFERENCE = [/^alex$/i, /^samantha/i, /^daniel/i, /^karen/i, /^moira/i, /us english/i, /uk english/i];
 
-function pickBritishVoice() {
+function narratorVoiceCandidates() {
   const voices = speechSynthesis.getVoices();
-  if (!voices.length) return null;
+  const en = voices.filter(v => (v.lang || '').replace('_', '-').startsWith('en'));
+  const picked = [];
+  for (const rx of VOICE_PREFERENCE) {
+    const v = en.find(v => rx.test(v.name) && !picked.includes(v));
+    if (v) picked.push(v);
+    if (picked.length >= 4) break;
+  }
+  for (const v of en) {                     // pad with whatever's around
+    if (picked.length >= 4) break;
+    if (!picked.includes(v)) picked.push(v);
+  }
+  return picked;
+}
+
+function pickNarratorVoice() {
+  const candidates = narratorVoiceCandidates();
+  if (!candidates.length) return null;
   let pinned = null;
-  try { pinned = localStorage.getItem('cbd_gb_voice'); } catch (_) { /* ignore */ }
+  try { pinned = localStorage.getItem('cbd_voice'); } catch (_) { /* ignore */ }
   if (pinned) {
-    const v = voices.find(v => v.name === pinned);
+    const v = speechSynthesis.getVoices().find(v => v.name === pinned);
     if (v) return v;
   }
-  const gb = voices.filter(v => (v.lang || '').replace('_', '-').startsWith('en-GB'));
-  let chosen = null;
-  for (const rx of GB_VOICE_PREFERENCE) {
-    chosen = gb.find(v => rx.test(v.name));
-    if (chosen) break;
-  }
-  chosen = chosen || gb[0] || voices.find(v => (v.lang || '').startsWith('en')) || null;
-  if (chosen) { try { localStorage.setItem('cbd_gb_voice', chosen.name); } catch (_) { /* ignore */ } }
+  const chosen = candidates[0];
+  try { localStorage.setItem('cbd_voice', chosen.name); } catch (_) { /* ignore */ }
   return chosen;
+}
+
+/* Cycle to the next candidate voice; returns its display name. */
+function cycleNarratorVoice() {
+  const candidates = narratorVoiceCandidates();
+  if (!candidates.length) return null;
+  const cur = pickNarratorVoice();
+  const idx = Math.max(0, candidates.findIndex(v => cur && v.name === cur.name));
+  const next = candidates[(idx + 1) % candidates.length];
+  try { localStorage.setItem('cbd_voice', next.name); } catch (_) { /* ignore */ }
+  return next.name;
+}
+
+function narratorVoiceName() {
+  const v = pickNarratorVoice();
+  return v ? v.name.split(' ')[0].toUpperCase() : 'AUTO';
 }
 
 // Voice lists load async in some browsers; warm the cache when they land.
 if ('speechSynthesis' in window && speechSynthesis.addEventListener) {
-  speechSynthesis.addEventListener('voiceschanged', pickBritishVoice, { once: true });
+  speechSynthesis.addEventListener('voiceschanged', pickNarratorVoice, { once: true });
 }
 
 function speakWithSynthesis(text) {
   return new Promise(resolve => {
     try {
-      const voice = pickBritishVoice();
+      const voice = pickNarratorVoice();
       const u = new SpeechSynthesisUtterance(text);
       if (voice) u.voice = voice;
-      u.rate = 0.92;
-      u.pitch = 0.75;                       // lower: distinguished, unhurried
+      u.rate = 0.95;
+      u.pitch = 0.85;                       // measured, unhurried
       u.onend = () => resolve(true);
       u.onerror = () => resolve(false);
       speechSynthesis.speak(u);

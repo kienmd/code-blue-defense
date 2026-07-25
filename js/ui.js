@@ -28,10 +28,12 @@ const el = {
   report: document.getElementById('report'),
   reportTitle: document.getElementById('report-title'),
   reportDetail: document.getElementById('report-detail'),
+  reportLedger: document.getElementById('report-ledger'),
   reportFlavor: document.getElementById('report-flavor'),
   btnNextShift: document.getElementById('btn-next-shift'),
   btnKeepBuilding: document.getElementById('btn-keep-building'),
   btnShift: document.getElementById('btn-shift'),
+  btnWing: document.getElementById('btn-wing'),
   shopRooms: document.getElementById('shop-rooms'),
   shopStaff: document.getElementById('shop-staff'),
   shopUpgrades: document.getElementById('shop-upgrades'),
@@ -40,6 +42,7 @@ const el = {
   intro: document.getElementById('intro'),
   ekg: document.getElementById('ekg'),
   btnMute: document.getElementById('btn-mute'),
+  btnVoice: document.getElementById('btn-voice'),
 };
 
 /* ---------- Banner ---------- */
@@ -54,7 +57,7 @@ function showBanner(html, kind, seconds) {
 
 /* ---------- HUD ---------- */
 function refreshHud() {
-  el.budget.textContent = `$${G.budget}`;
+  el.budget.textContent = fmtMoney(G.budget);
   el.lives.innerHTML = `ICU ${'\u2665'.repeat(Math.max(0, G.lives))}${'\u2661'.repeat(Math.max(0, START_LIVES - G.lives))}`;
   el.shift.textContent = G.phase === 'cooloff'
     ? `COOL-OFF \u00b7 NEXT: SHIFT ${G.shiftIdx + 2}/${SHIFTS.length}`
@@ -82,11 +85,32 @@ function fmtSecs(s) {
 function showShiftReport() {
   const st = G.shiftStats;
   el.reportTitle.textContent = `SHIFT ${G.shiftIdx + 1} REPORT`;
+  const era = eraForShift(G.shiftIdx);
   el.reportDetail.innerHTML =
     `PATIENTS HELPED: <b>${st.helped}</b> \u00b7 ICU TRANSFERS: <b>${st.transfers}</b><br/>` +
-    `EARNED: <b>$${st.earned}</b> \u00b7 SPENT: <b>$${st.spent}</b><br/>` +
-    `STAFF BURNOUTS: <b>${st.burnouts}</b><br/>` +
-    `TOTALS \u2014 HELPED ${G.discharged} \u00b7 TRANSFERS ${G.transfers} \u00b7 BUDGET $${G.budget}`;
+    `STAFF BURNOUTS: <b>${st.burnouts}</b>` +
+    (st.diagCount ? ` \u00b7 AVG TIME-TO-DIAGNOSIS: <b>${fmtSecs(st.diagTime / st.diagCount)}</b>` : '') + '<br/>' +
+    `ERA TECH (${era.label}): DIAG x${era.mods.diag} \u00b7 TREAT x${era.mods.treat} \u00b7 STRESS x${era.mods.stress}<br/>` +
+    `TOTALS \u2014 HELPED ${G.discharged} \u00b7 TRANSFERS ${G.transfers} \u00b7 BUDGET ${fmtMoney(G.budget)}`;
+
+  // Income/expense ledger (docs/ECONOMY.md 3d.6): faucets above the
+  // line, drains below, NET in big type — the economy teaches itself.
+  const income = st.earned + st.copays + st.grant;
+  const expense = st.salaries + st.upkeep + st.spent + st.penalties + st.apPrior;
+  const net = income - expense;
+  const row = (label, amt, cls, sign) =>
+    amt ? `<div class="${cls}">${sign}${fmtMoney(amt)} \u2014 ${label}</div>` : '';
+  el.reportLedger.innerHTML =
+    row('REIMBURSEMENTS', st.earned, 'lg-in', '+') +
+    row('COPAYS', st.copays, 'lg-in', '+') +
+    row('MODERNIZATION GRANT', st.grant, 'lg-in', '+') +
+    row('SALARIES', st.salaries, 'lg-out', '-') +
+    row('ROOM UPKEEP', st.upkeep, 'lg-out', '-') +
+    row('BUILDS / HIRES / TECH', st.spent, 'lg-out', '-') +
+    row('PRIVATE-WING SETTLEMENTS', st.penalties, 'lg-out', '-') +
+    row('ACCOUNTS PAYABLE (PRIOR)', st.apPrior, 'lg-out', '-') +
+    `<div class="lg-net" style="color:${net >= 0 ? 'var(--green)' : 'var(--red)'}">NET ${net >= 0 ? '+' : ''}${fmtMoney(net)}</div>` +
+    (st.apCarried ? `<div class="lg-out">CARRIED TO NEXT SHIFT: ${fmtMoney(st.apCarried)} A/P</div>` : '');
   let flavor;
   if (st.helped === 0) flavor = 'ROUGH ONE. NOBODY WALKED OUT SMILING.';
   else if (st.fastestCure !== null && st.fastestCure < 20) flavor = `FASTEST CURE: ${fmtSecs(st.fastestCure)} \u2014 NICE HUSTLE.`;
@@ -102,6 +126,10 @@ function refreshShiftButton() {
   const show = G.state === 'playing' && G.phase === 'cooloff' && el.report.classList.contains('hidden');
   el.btnShift.classList.toggle('hidden', !show);
   if (show) el.btnShift.textContent = `START SHIFT ${G.shiftIdx + 2}`;
+  // Private-wing lever rides along with the cool-off (ECONOMY.md 3a).
+  el.btnWing.classList.toggle('hidden', !show);
+  el.btnWing.classList.toggle('armed', G.privateWingArmed);
+  el.btnWing.textContent = `PRIVATE WING: ${G.privateWingArmed ? 'ON' : 'OFF'}`;
 }
 
 function showResult(won, stars) {
@@ -111,7 +139,7 @@ function showResult(won, stars) {
   el.resultDetail.innerHTML =
     `PATIENTS HELPED: ${G.discharged}<br/>` +
     `ICU TRANSFERS: ${G.transfers}<br/>` +
-    `FINAL BUDGET: $${G.budget}`;
+    `FINAL BUDGET: ${fmtMoney(G.budget)}`;
   el.result.classList.remove('hidden');
 }
 
@@ -134,9 +162,10 @@ function makeShopItem(parent, iconDraw, name, cost, tooltipHtml, onActivate, dra
   item.className = 'shop-item' + (drag ? ' upgrade' : '');
   item.appendChild(iconCanvas(iconDraw));
   item.insertAdjacentHTML('beforeend',
-    `<div class="si-name">${name.toUpperCase()}</div><div class="si-cost">$${cost}</div>`);
+    `<div class="si-name">${name.toUpperCase()}</div><div class="si-cost">${fmtMoney(cost)}</div>`);
   item.addEventListener(drag ? 'mousedown' : 'click', evt => {
     ensureAudio();
+    if (item.classList.contains('locked')) { G.sfx('denied'); return; }
     if (item.classList.contains('disabled') || item.classList.contains('soldout')) { G.sfx('denied'); return; }
     onActivate(evt, item);
     if (drag) evt.preventDefault();
@@ -146,13 +175,29 @@ function makeShopItem(parent, iconDraw, name, cost, tooltipHtml, onActivate, dra
   return item;
 }
 
+/* Era gating (docs/ERAS.md): a tech appears the shift its decade
+ * begins; the cool-off BEFORE that shift counts as prep for it. */
+function upgradeLocked(def) {
+  if (def.unlockShift == null) return false;
+  const reach = G.phase === 'cooloff' ? G.shiftIdx + 1 : G.shiftIdx;
+  return reach < def.unlockShift;
+}
+
+/* "DIAGNOSIS: YES/SLOW/NO" — the capability line for tooltips + the
+ * inspector panel (user rule: not everyone can diagnose). */
+function diagCapability(def) {
+  if (!def.canDiagnose) return 'NO';
+  return def.diagSeconds <= 2 ? 'YES (FAST)' : 'SLOW (ASSESSMENT)';
+}
+
 function buildShop() {
   for (const [key, def] of Object.entries(ROOM_TYPES)) {
     shopButtons.rooms[key] = makeShopItem(
       el.shopRooms,
       ictx => drawRoomIcon(ictx, key, 0, 0),
       def.name, def.cost,
-      `<b>${def.name}</b> — ${def.desc} Builds instantly in the next open slot.`,
+      `<b>${def.name}</b> — ${def.desc} Builds instantly in the next open slot.` +
+        ` Upkeep ${fmtMoney(def.cost * UPKEEP_RATE)}/shift${def.support ? '' : '; repeat copies cost x1.5'}.`,
       () => { G.selection = null; buildRoom(key); },
     );
   }
@@ -161,7 +206,8 @@ function buildShop() {
       el.shopStaff,
       ictx => drawStaffSprite(ictx, key, 0, 10),
       def.name, def.cost,
-      `<b>${def.name}</b> — ${def.desc}`,
+      `<b>${def.name}</b> — ${def.desc}` +
+        ` DIAGNOSIS: ${diagCapability(def)}. Salary ${fmtMoney(def.salary)}/shift.`,
       () => hireStaff(key),
     );
   }
@@ -195,15 +241,26 @@ function refreshShop() {
   const full = !nextBuildSlot();
   for (const [key, def] of Object.entries(ROOM_TYPES)) {
     const item = shopButtons.rooms[key];
-    item.classList.toggle('disabled', full || G.budget < def.cost);
+    const cost = roomBuildCost(key);      // escalated for repeat copies, then inflated
+    item.querySelector('.si-cost').textContent = fmtMoney(cost);
+    item.classList.toggle('disabled', full || G.budget < cost);
   }
   for (const [key, def] of Object.entries(STAFF_TYPES)) {
-    shopButtons.staff[key].classList.toggle('disabled', G.budget < def.cost);
+    const item = shopButtons.staff[key];
+    const cost = inflatedCost(def.cost);
+    item.querySelector('.si-cost').textContent = fmtMoney(cost);
+    item.classList.toggle('disabled', G.budget < cost);
   }
   for (const [key, def] of Object.entries(UPGRADE_TYPES)) {
     const item = shopButtons.upgrades[key];
     const sold = def.unique && G.upgrades[key];
+    const locked = upgradeLocked(def);
+    const cost = inflatedCost(def.cost);
+    item.classList.toggle('locked', locked);
+    item.querySelector('.si-cost').textContent = locked
+      ? `\u{1F512}${eraForShift(def.unlockShift).label}`
+      : fmtMoney(cost);
     item.classList.toggle('soldout', !!sold);
-    item.classList.toggle('disabled', !sold && G.budget < def.cost);
+    item.classList.toggle('disabled', !sold && !locked && G.budget < cost);
   }
 }

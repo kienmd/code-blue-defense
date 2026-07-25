@@ -98,6 +98,8 @@ canvas#game {
 .overlay.hidden, .hidden { display: none !important; }
 
 .overlay h1 { font-size: 26px; color: var(--blue); text-shadow: 4px 4px 0 #06264a; }
+/* Title + menu are fully OPAQUE — the hospital reveals after START. */
+#intro, #menu { background: var(--bg, #0a0f1e); }
 #intro { cursor: pointer; z-index: 30; }
 #intro .intro-title { font-size: 34px; animation: titlepulse 2s steps(2) infinite; }
 @keyframes titlepulse { 50% { text-shadow: 4px 4px 0 #06264a, 0 0 18px rgba(74,163,223,.55); } }
@@ -142,6 +144,26 @@ canvas#game {
   animation: shiftpulse 1s steps(2) infinite;
 }
 @keyframes shiftpulse { 50% { border-color: var(--amber); color: var(--amber); } }
+
+/* Private-wing risk lever (cool-off only), beside START SHIFT */
+#btn-wing {
+  position: absolute;
+  bottom: 18px;
+  left: calc(50% + 130px);
+  z-index: 12;
+  font-size: 8px;
+}
+#btn-wing.armed { border-color: var(--amber); color: var(--amber); }
+
+/* Pre-game: blank the gameplay HUD stats and hide the shop until START */
+body.pregame .hud-item:not(.hud-btn) { visibility: hidden; }
+body.pregame #shop { visibility: hidden; }
+
+/* Shift-report ledger */
+#report-ledger { font-size: 8px; line-height: 2; color: #9fb4c8; text-align: left; }
+#report-ledger .lg-in { color: var(--green); }
+#report-ledger .lg-out { color: var(--red); }
+#report-ledger .lg-net { font-size: 11px; color: var(--ink); }
 
 .btn-row { display: flex; gap: 12px; }
 .pxbtn {
@@ -235,6 +257,8 @@ canvas#game {
 .shop-item.selected { border-color: var(--green); background: #10240f; }
 .shop-item.disabled { opacity: .35; cursor: not-allowed; }
 .shop-item.soldout { opacity: .35; cursor: not-allowed; border-style: dashed; }
+.shop-item.locked { opacity: .5; cursor: not-allowed; filter: grayscale(1); }
+.shop-item.locked .si-cost { color: var(--amber); }
 .shop-item canvas { width: 28px; height: 28px; image-rendering: pixelated; display: block; margin: 0 auto; }
 .shop-item .si-name { display: none; }   /* names live in the INFO panel on hover */
 .shop-item .si-cost { font-size: 6px; color: var(--green); margin-top: 2px; }

@@ -24,6 +24,11 @@ const G = {
   shiftElapsed: 0,
   schedule: [],
   shiftStats: null,         // per-shift report tally, reset by startShift()
+  // economy (docs/ECONOMY.md): soft debt, catch-up rails, risk lever
+  accountsPayable: 0,       // salary/upkeep shortfall carried to next settle
+  bailouts: 0,              // county bailouts taken (first free, rest cost stars)
+  privateWingArmed: false,  // toggled in cool-off, applies to the NEXT shift
+  privateWingActive: false, // in force for the CURRENT shift
   // camera (world -> canvas): render.js eases zoom toward the fit
   // for the visible floors; input.js inverts it for hit-testing.
   zoom: 1,

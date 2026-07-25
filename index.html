@@ -17,6 +17,7 @@
         <span class="hud-item" id="hud-lives" title="ICU capacity remaining">ICU</span>
         <span class="hud-item" id="hud-shift" title="Shift">PREP</span>
         <span class="hud-item" id="hud-waiting" title="Patients in the waiting room">WAITING 0</span>
+        <button id="btn-voice" class="hud-item hud-btn" title="Cycle narrator voice">VOICE</button>
         <button id="btn-mute" class="hud-item hud-btn" title="Toggle sound">SND ON</button>
       </div>
     </header>
@@ -38,7 +39,7 @@
         <h1>CODE BLUE DEFENSE</h1>
         <h2>WARD SHIFT</h2>
         <p class="tagline">Build the hospital. Diagnose the pathogen. Allocate the bed.<br/>
-          Ten shifts. Nobody gets left in the waiting room.</p>
+          Thirteen shifts, 1950 to the year 3000. Nobody gets left in the waiting room.</p>
         <button id="btn-start" class="pxbtn primary">START SHIFT 1</button>
         <p id="menu-best" class="hint"></p>
         <p class="hint">
@@ -53,6 +54,7 @@
       <div id="report" class="overlay hidden">
         <h1 id="report-title">SHIFT 1 REPORT</h1>
         <p id="report-detail"></p>
+        <div id="report-ledger"></div>
         <p id="report-flavor" class="hint"></p>
         <div class="btn-row">
           <button id="btn-next-shift" class="pxbtn primary">START SHIFT 2</button>
@@ -60,8 +62,9 @@
         </div>
       </div>
 
-      <!-- Player-paced start button (cool-off phase) -->
+      <!-- Player-paced start button (cool-off phase) + private-wing risk lever -->
       <button id="btn-shift" class="pxbtn primary hidden">START SHIFT 1</button>
+      <button id="btn-wing" class="pxbtn hidden" title="Next shift: payouts x1.3, but each ICU transfer costs a settlement">PRIVATE WING: OFF</button>
 
       <!-- Win / loss overlay -->
       <div id="result" class="overlay hidden">
