@@ -1,0 +1,7 @@
+# Local secrets — API keys live here and NEVER get committed.
+# Put your keys in js/keys.local.js:
+#   window.ELEVENLABS_API_KEY = 'sk_...';
+#   window.ANTHROPIC_API_KEY = 'sk-ant-...';
+js/keys.local.js
+
+.DS_Store

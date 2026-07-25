@@ -117,6 +117,9 @@
     <script>window.ANTHROPIC_API_KEY = "sk-ant-...";</script>
     <script>window.ELEVENLABS_API_KEY = "sk_...";</script>
   -->
+  <!-- Local API keys (gitignored; a 404 here is fine — the game runs
+       without keys). See .gitignore + README "Audio & narration". -->
+  <script src="js/keys.local.js"></script>
   <!-- Plain scripts, shared global scope, load order matters:
        data (constants/agentic/levels/entities) -> audio/narrator ->
        state -> ui -> sim -> input -> render -> main (boot). -->

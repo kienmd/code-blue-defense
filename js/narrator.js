@@ -139,15 +139,43 @@ function playClip(url) {
   });
 }
 
+/* The en-GB backup voice is a FEATURE, not just a fallback — pin one
+ * deterministic choice so the narrator doesn't change accents between
+ * sessions. Preference order, then pin the winner's name in
+ * localStorage; re-derive only if that voice disappears. */
+const GB_VOICE_PREFERENCE = [/^daniel/i, /^arthur/i, /^george/i, /serena/i, /^kate/i, /uk english male/i];
+
+function pickBritishVoice() {
+  const voices = speechSynthesis.getVoices();
+  if (!voices.length) return null;
+  let pinned = null;
+  try { pinned = localStorage.getItem('cbd_gb_voice'); } catch (_) { /* ignore */ }
+  if (pinned) {
+    const v = voices.find(v => v.name === pinned);
+    if (v) return v;
+  }
+  const gb = voices.filter(v => (v.lang || '').replace('_', '-').startsWith('en-GB'));
+  let chosen = null;
+  for (const rx of GB_VOICE_PREFERENCE) {
+    chosen = gb.find(v => rx.test(v.name));
+    if (chosen) break;
+  }
+  chosen = chosen || gb[0] || voices.find(v => (v.lang || '').startsWith('en')) || null;
+  if (chosen) { try { localStorage.setItem('cbd_gb_voice', chosen.name); } catch (_) { /* ignore */ } }
+  return chosen;
+}
+
+// Voice lists load async in some browsers; warm the cache when they land.
+if ('speechSynthesis' in window && speechSynthesis.addEventListener) {
+  speechSynthesis.addEventListener('voiceschanged', pickBritishVoice, { once: true });
+}
+
 function speakWithSynthesis(text) {
   return new Promise(resolve => {
     try {
-      const voices = speechSynthesis.getVoices();
-      const gb = voices.filter(v => (v.lang || '').startsWith('en-GB'));
-      const male = gb.find(v => /daniel|george|arthur|male/i.test(v.name)) || gb[0]
-        || voices.find(v => (v.lang || '').startsWith('en')) || null;
+      const voice = pickBritishVoice();
       const u = new SpeechSynthesisUtterance(text);
-      if (male) u.voice = male;
+      if (voice) u.voice = voice;
       u.rate = 0.92;
       u.pitch = 0.75;                       // lower: distinguished, unhurried
       u.onend = () => resolve(true);

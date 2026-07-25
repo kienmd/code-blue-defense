@@ -88,3 +88,18 @@ js/entities.js    Patient/Tower classes + pixel sprite painters
 js/game.js        engine loop, input, drag-drop, waves, render, HUD
 DESIGN.md         design ideation history
 ```
+
+## API keys (optional — the game runs fully without them)
+
+Put your keys in `js/keys.local.js` — **it is gitignored**, so they never
+land in a commit:
+
+```js
+// js/keys.local.js  (create this file yourself; a 404 for it is harmless)
+window.ELEVENLABS_API_KEY = 'sk_...';   // British narrator voice (TTS)
+window.ANTHROPIC_API_KEY = 'sk-ant-...'; // live LLM triage + patient complaints
+```
+
+Without keys: narration falls back to the browser's built-in en-GB voice
+(subtitles always render), and diagnosis/complaints use the deterministic
+offline tables. See the AUDIO & NARRATION section for details.
