@@ -6,6 +6,12 @@
 
 const FONT = '7px "Press Start 2P", monospace';
 
+/* The era whose LOOK is in force: during cool-off, preview the era
+ * the next shift belongs to (matches the roof sign + shop gating). */
+function eraNow() {
+  return eraForShift(G.phase === 'cooloff' ? G.shiftIdx + 1 : Math.max(0, G.shiftIdx));
+}
+
 function render() {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -14,14 +20,19 @@ function render() {
    * Few floors => zoomed in (big sprites); more floors => eased out.
    * Uniform scale + translate; input.js inverts G.view for clicks. */
   const topFloor = topVisibleFloor();
-  const worldTop = floorTopY(topFloor) - 44;               // roof sign headroom
-  const worldH = GROUND_Y + 16 - worldTop;
-  const targetZoom = Math.min(ZOOM_MAX, canvas.height / worldH);
+  const worldTop = floorTopY(topFloor) - 40;               // roof sign headroom
+  const worldH = GROUND_Y + 10 - worldTop;
+  // Fit the BUILDING (x 24..880), not the full world: dead side
+  // margins are cropped so sprites read as big as possible.
+  const bldX = 24, bldW = 880 - bldX;
+  const widthFit = canvas.width / bldW;
+  const targetZoom = Math.min(widthFit, canvas.height / worldH);
   G.zoom += (targetZoom - G.zoom) * ZOOM_EASE;
   const s = G.zoom;
-  const ox = (canvas.width - WORLD_W * s) / 2;
+  const ox = (canvas.width - bldW * s) / 2 - bldX * s;
   const oy = (canvas.height - worldH * s) / 2 - worldTop * s;
   G.view = { s, ox, oy };
+  const era = eraNow();                                    // drives every era visual below
 
   // Night sky + stars (screen space, full canvas)
   ctx.fillStyle = PALETTE.night;
@@ -40,21 +51,22 @@ function render() {
   ctx.fillStyle = '#242e48';
   ctx.fillRect(-400, GROUND_Y, WORLD_W + 800, 3);
 
-  // Building shell + roof sign (only as tall as the visible floors)
+  // Building shell — the exterior AGES with the era (brick -> concrete
+  // -> glass -> holo), driven by ERAS[*].shell / roofStyle.
   const bTop = floorTopY(topFloor);
-  ctx.fillStyle = PALETTE.building;
+  ctx.fillStyle = era.shell || PALETTE.building;
   ctx.fillRect(32, bTop - 14, 848 - 8, GROUND_Y - bTop + 14);
-  ctx.fillStyle = PALETTE.frame;
-  ctx.fillRect(32, bTop - 14, 840, 14);
-  ctx.fillStyle = PALETTE.red;
-  ctx.fillRect(388, bTop - 34, 20, 20);
-  ctx.fillStyle = PALETTE.white;
-  ctx.fillRect(396, bTop - 30, 4, 12); ctx.fillRect(392, bTop - 26, 12, 4);
+  if (era.roofStyle === 'cross' || era.roofStyle === 'water') {
+    // brick/concrete courses on the parapet edges
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    for (let yy = bTop; yy < GROUND_Y; yy += 10) { ctx.fillRect(32, yy, 6, 2); ctx.fillRect(866, yy, 6, 2); }
+  }
+  drawRoof(era, bTop);
   ctx.font = FONT;
-  ctx.fillStyle = PALETTE.blue;
+  ctx.fillStyle = era.roofStyle === 'glass' || era.roofStyle === 'helipad' || era.roofStyle === 'holo'
+    ? PALETTE.blue : PALETTE.white;
   ctx.textAlign = 'left';
-  const signEra = eraForShift(G.phase === 'cooloff' ? G.shiftIdx + 1 : Math.max(0, G.shiftIdx));
-  ctx.fillText(`CODE BLUE GENERAL \u00b7 ${signEra.sign}`, 420, bTop - 20);
+  ctx.fillText(`CODE BLUE GENERAL \u00b7 ${era.sign}`, 420, bTop - 20);
 
   // Floors — only the ones in use, plus the next buildable floor as a
   // dimmed "expansion" hint. The hospital visibly grows as you build.
@@ -220,6 +232,84 @@ function render() {
   ctx.textAlign = 'left';
 }
 
+/* Roofline: parapet + era props. Every era keeps the red cross (it's
+ * a hospital); what sits beside it marks the decade. */
+function drawRoof(era, bTop) {
+  // parapet
+  ctx.fillStyle = PALETTE.frame;
+  ctx.fillRect(32, bTop - 14, 840, 14);
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.fillRect(32, bTop - 14, 840, 3);
+  // the constant: red cross sign
+  ctx.fillStyle = PALETTE.red;
+  ctx.fillRect(388, bTop - 34, 20, 20);
+  ctx.fillStyle = PALETTE.white;
+  ctx.fillRect(396, bTop - 30, 4, 12); ctx.fillRect(392, bTop - 26, 12, 4);
+
+  const style = era.roofStyle || 'cross';
+  if (style === 'cross') {
+    // 1950s-60s: brick chimney + wire antenna
+    ctx.fillStyle = '#4a2c20';
+    ctx.fillRect(120, bTop - 34, 16, 20);
+    ctx.fillStyle = '#3a2018';
+    ctx.fillRect(118, bTop - 36, 20, 4);
+    ctx.fillStyle = '#8a94a4';
+    ctx.fillRect(760, bTop - 40, 2, 26);
+    ctx.fillRect(752, bTop - 34, 18, 2);
+  } else if (style === 'water') {
+    // 70s-80s: rooftop water tower + AC box
+    ctx.fillStyle = '#6a5844';
+    ctx.fillRect(110, bTop - 44, 34, 22);
+    ctx.fillStyle = '#57483a';
+    ctx.fillRect(106, bTop - 48, 42, 6);
+    ctx.fillRect(114, bTop - 22, 4, 8); ctx.fillRect(136, bTop - 22, 4, 8);
+    ctx.fillStyle = '#8a94a4';
+    ctx.fillRect(720, bTop - 26, 26, 12);
+    ctx.fillStyle = PALETTE.ink;
+    ctx.fillRect(724, bTop - 22, 18, 2);
+  } else if (style === 'ac') {
+    // 1990s: twin HVAC units + antenna
+    ctx.fillStyle = '#8a94a4';
+    ctx.fillRect(120, bTop - 26, 26, 12); ctx.fillRect(160, bTop - 26, 26, 12);
+    ctx.fillStyle = PALETTE.ink;
+    ctx.fillRect(124, bTop - 22, 18, 2); ctx.fillRect(164, bTop - 22, 18, 2);
+    ctx.fillStyle = '#aab4c4';
+    ctx.fillRect(770, bTop - 44, 2, 30);
+    ctx.fillRect(764, bTop - 38, 14, 2);
+  } else if (style === 'glass') {
+    // 2000s-10s: glass parapet gleam + illuminated sign backing
+    ctx.fillStyle = 'rgba(122,180,255,0.25)';
+    ctx.fillRect(32, bTop - 12, 840, 10);
+    ctx.fillStyle = 'rgba(74,163,223,0.28)';
+    ctx.fillRect(414, bTop - 32, 260, 16);
+    ctx.fillStyle = '#aab4c4';
+    ctx.fillRect(140, bTop - 40, 2, 26); ctx.fillRect(134, bTop - 34, 14, 2);
+  } else if (style === 'helipad') {
+    // 2020s-30s: helipad + blinking beacon
+    ctx.fillStyle = '#39445c';
+    ctx.fillRect(96, bTop - 20, 80, 8);
+    ctx.fillStyle = PALETTE.white;
+    ctx.fillRect(128, bTop - 18, 4, 5); ctx.fillRect(140, bTop - 18, 4, 5); ctx.fillRect(130, bTop - 16, 12, 2);
+    const blink = Math.floor(G.time * 2) % 2 === 0;
+    ctx.fillStyle = blink ? PALETTE.brightRed : '#5a2020';
+    ctx.fillRect(770, bTop - 24, 4, 4);
+    ctx.fillStyle = '#8a94a4';
+    ctx.fillRect(771, bTop - 20, 2, 8);
+  } else if (style === 'holo') {
+    // 2040s+: floating holo-spire, pulsing
+    const pulse = 0.5 + 0.5 * Math.sin(G.time * 3);
+    ctx.fillStyle = '#7a68d8';
+    ctx.fillRect(136, bTop - 46, 4, 32);
+    ctx.globalAlpha = 0.35 + 0.35 * pulse;
+    ctx.fillStyle = '#c858e8';
+    ctx.fillRect(128, bTop - 54, 20, 6);
+    ctx.fillRect(132, bTop - 62, 12, 4);
+    ctx.globalAlpha = 0.2 + 0.2 * pulse;
+    ctx.fillRect(414, bTop - 34, 260, 20);                 // sign halo
+    ctx.globalAlpha = 1;
+  }
+}
+
 /* Age of War-style decade card: slides in from the left, SITS for
  * several seconds (click to skip), fades out. Arrivals hold while
  * it's up — reading it is never punished. Screen space. */
@@ -263,6 +353,11 @@ function drawLobby() {
   const top = floorTopY(0);
   ctx.fillStyle = '#1c2438';
   ctx.fillRect(ELEV_X + ELEV_W, top + 2, 872 - ELEV_X - ELEV_W, FLOOR_H - 6);
+  // era wall wash — the interior dates itself along with the roofline
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = eraNow().wall;
+  ctx.fillRect(ELEV_X + ELEV_W, top + 2, 872 - ELEV_X - ELEV_W, FLOOR_H - 6);
+  ctx.globalAlpha = 1;
   // waiting chairs
   for (let i = 0; i < WAIT_SPOTS; i++) {
     const x = waitSpotX(i);
@@ -294,9 +389,13 @@ function drawLobby() {
 
 function drawRoomInterior(room) {
   const { x, y, w, h } = room;
-  // lit interior, tinted by room type
+  // lit interior: era wall base, tinted by room type
   ctx.fillStyle = '#20293e';
   ctx.fillRect(x + 2, y + 2, w - 4, h - 6);
+  ctx.globalAlpha = 0.4;
+  ctx.fillStyle = eraNow().wall;
+  ctx.fillRect(x + 2, y + 2, w - 4, h - 6);
+  ctx.globalAlpha = 1;
   ctx.fillStyle = room.def.color;
   ctx.globalAlpha = 0.14;
   ctx.fillRect(x + 2, y + 2, w - 4, h - 6);
@@ -376,7 +475,8 @@ function drawPatientEntity(p) {
 function drawStaffEntity(s) {
   const burned = s.isBurnedOut(G.time);
   ctx.globalAlpha = burned ? 0.45 : 1;
-  drawStaffSprite(ctx, s.typeKey, s.x, s.y, s.state === 'walking' ? G.time * 9 : 0);
+  // era outfit: scrub palette marches through the decades
+  drawStaffSprite(ctx, s.typeKey, s.x, s.y, s.state === 'walking' ? G.time * 9 : 0, eraNow().scrub);
   ctx.globalAlpha = 1;
   if (burned) {
     ctx.font = FONT;

@@ -159,6 +159,14 @@ canvas#game {
 body.pregame .hud-item:not(.hud-btn) { visibility: hidden; }
 body.pregame #shop { visibility: hidden; }
 
+/* Era learning popup */
+#era-report h1 { color: var(--amber); text-shadow: 4px 4px 0 #3a2600; font-size: 20px; }
+#era-report h2 { color: var(--blue); font-size: 10px; letter-spacing: 2px; }
+#era-tech { font-size: 8px; line-height: 2.2; color: var(--green); }
+#era-mods { font-size: 8px; line-height: 2.2; color: #9fb4c8; }
+#era-mods .lg-in { color: var(--green); }
+#era-mods .lg-out { color: var(--red); }
+
 /* Shift-report ledger */
 #report-ledger { font-size: 8px; line-height: 2; color: #9fb4c8; text-align: left; }
 #report-ledger .lg-in { color: var(--green); }

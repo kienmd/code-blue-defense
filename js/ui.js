@@ -32,6 +32,13 @@ const el = {
   reportFlavor: document.getElementById('report-flavor'),
   btnNextShift: document.getElementById('btn-next-shift'),
   btnKeepBuilding: document.getElementById('btn-keep-building'),
+  eraReport: document.getElementById('era-report'),
+  eraTitle: document.getElementById('era-title'),
+  eraSub: document.getElementById('era-sub'),
+  eraTech: document.getElementById('era-tech'),
+  eraImpact: document.getElementById('era-impact'),
+  eraMods: document.getElementById('era-mods'),
+  btnEraContinue: document.getElementById('btn-era-continue'),
   btnShift: document.getElementById('btn-shift'),
   btnWing: document.getElementById('btn-wing'),
   shopRooms: document.getElementById('shop-rooms'),
@@ -122,8 +129,37 @@ function showShiftReport() {
   el.report.classList.remove('hidden');
 }
 
+/* Mandatory inter-round learning popup: what the coming decade
+ * invented, what it changed in the real world, and exactly what it
+ * does to your numbers next round (docs/ERAS.md era-up copy). */
+function showEraReport(era, startNext) {
+  const cur = eraForShift(G.shiftIdx);
+  el.eraTitle.textContent = `ENTERING THE ${era.label}`;
+  el.eraSub.textContent = era.sub;
+  el.eraTech.innerHTML = era.tech.map(t => `<div class="era-tech-line">${t}</div>`).join('');
+  el.eraImpact.textContent = era.impact;
+  const arrow = (label, from, to, lowerIsBetter) => {
+    const better = lowerIsBetter ? to < from : to > from;
+    const cls = to === from ? '' : (better ? 'lg-in' : 'lg-out');
+    return `<span class="${cls}">${label} x${from} \u2192 x${to}</span>`;
+  };
+  el.eraMods.innerHTML =
+    `<div>NEXT ROUND'S STANDARD OF CARE:</div>` +
+    `<div>${arrow('DIAG TIME', cur.mods.diag, era.mods.diag, true)} \u00b7 ` +
+    `${arrow('TREAT RATE', cur.mods.treat, era.mods.treat, false)} \u00b7 ` +
+    `${arrow('STRESS', cur.mods.stress, era.mods.stress, true)} \u00b7 ` +
+    `${arrow('LOBBY DECAY', cur.mods.wait, era.mods.wait, true)}</div>` +
+    (era.autoDiag && !cur.autoDiag ? `<div class="lg-in">NEW BASELINE: PATIENTS AUTO-DIAGNOSE ON ARRIVAL</div>` : '') +
+    (era.autoAssign && !cur.autoAssign ? `<div class="lg-in">NEW BASELINE: AUTO-ASSIGN TO MATCHING BEDS</div>` : '') +
+    `<div>PRICES &amp; PAYOUTS: x${cur.inflation} \u2192 x${era.inflation} (INFLATION)</div>`;
+  el.btnEraContinue.textContent = startNext ? `START THE ${era.label}` : 'CONTINUE';
+  el.eraReport.classList.remove('hidden');
+  el.eraReport.dataset.startNext = startNext ? '1' : '';
+}
+
 function refreshShiftButton() {
-  const show = G.state === 'playing' && G.phase === 'cooloff' && el.report.classList.contains('hidden');
+  const show = G.state === 'playing' && G.phase === 'cooloff' &&
+    el.report.classList.contains('hidden') && el.eraReport.classList.contains('hidden');
   el.btnShift.classList.toggle('hidden', !show);
   if (show) el.btnShift.textContent = `START SHIFT ${G.shiftIdx + 2}`;
   // Private-wing lever rides along with the cool-off (ECONOMY.md 3a).

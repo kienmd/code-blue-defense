@@ -12,6 +12,28 @@ el.btnStart.addEventListener('click', () => { ensureAudio(); G.sfx('buy'); stopM
 el.btnRetry.addEventListener('click', () => { ensureAudio(); stopMusic(); setPregame(false); startRun(); });
 el.btnMenu.addEventListener('click', () => { showMenu(); startMusic(); setPregame(true); });
 el.btnShift.addEventListener('click', () => { ensureAudio(); G.sfx('buy'); startShift(); });
+
+/* Dismissing the SHIFT REPORT routes through the mandatory ERA REPORT
+ * when the next shift crosses a decade boundary. */
+function dismissShiftReport(startNext) {
+  ensureAudio();
+  el.report.classList.add('hidden');
+  if (G.pendingEraReport) {
+    G.sfx('era');
+    showEraReport(G.pendingEraReport, startNext);
+    return;
+  }
+  if (startNext) { G.sfx('buy'); startShift(); }
+  else refreshShiftButton();
+}
+el.btnEraContinue.addEventListener('click', () => {
+  const startNext = el.eraReport.dataset.startNext === '1';
+  el.eraReport.classList.add('hidden');
+  G.pendingEraReport = null;
+  if (startNext) { G.sfx('buy'); startShift(); }
+  else refreshShiftButton();
+});
+
 // Private-wing risk lever: arm during cool-off, applies to the next shift.
 el.btnWing.addEventListener('click', () => {
   ensureAudio();
@@ -19,11 +41,8 @@ el.btnWing.addEventListener('click', () => {
   G.sfx(G.privateWingArmed ? 'buy' : 'denied');
   refreshShiftButton();
 });
-el.btnNextShift.addEventListener('click', () => { ensureAudio(); G.sfx('buy'); startShift(); });
-el.btnKeepBuilding.addEventListener('click', () => {
-  el.report.classList.add('hidden');
-  refreshShiftButton();
-});
+el.btnNextShift.addEventListener('click', () => dismissShiftReport(true));
+el.btnKeepBuilding.addEventListener('click', () => dismissShiftReport(false));
 
 /* Intro screen: the click-through IS the autoplay gesture — it
  * unlocks WebAudio and starts the theme in one move. */
