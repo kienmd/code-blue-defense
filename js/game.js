@@ -94,6 +94,7 @@
     selection: null,          // {kind:'patient'|'staff', obj}
     buildType: null,
     hover: null,              // {x,y} canvas coords
+    hoverPatientId: null,     // for INFO-panel updates on hover change
     dragUpgrade: null,
     autoAssignTimer: 0,
     heartbeatTimer: 0,
@@ -190,6 +191,9 @@
     p.waitIndex = spot;
     p.path = [{ x: waitSpotX(spot), y: floorWalkY(0) }];
     G.patients.push(p);
+
+    // Presenting complaint: fire-and-forget flavor (LLM or canned table).
+    generateComplaint(p).then(line => { if (!p.outcome) p.complaint = line; });
 
     // AGENTIC LAB-ROUTER: instant AI diagnosis on arrival.
     if (G.upgrades.labRouter) {
@@ -359,10 +363,13 @@
         if (p.transferT <= 0) p.outcome = 'transferred';
         continue;
       }
+      if (p.blurtT > 0) p.blurtT -= dt;
       if (p.state === 'arriving' || p.state === 'walking') {
         if (moveAlongPath(p, dt)) {
-          if (p.state === 'arriving') p.state = 'waiting';
-          else {
+          if (p.state === 'arriving') {
+            p.state = 'waiting';
+            if (Math.random() < 0.65) p.blurtT = 3;      // blurt on sit-down
+          } else {
             p.state = 'inBed';
             const pos = p.room.bedPos(p.bedIndex);
             p.x = pos.x; p.y = pos.y - 4;
@@ -910,6 +917,37 @@
       ctx.globalAlpha = 1;
     }
 
+    // Auto-blurts: fresh arrivals mutter their complaint
+    for (const p of G.patients) {
+      if (p.blurtT > 0 && p.complaint && p.state === 'waiting') {
+        const short = p.complaint.length > 20 ? p.complaint.slice(0, 19) + '…' : p.complaint;
+        drawSpeechBubble(p.x, p.y - 52, [short], null, Math.min(1, p.blurtT));
+      }
+    }
+
+    // Hover: highlight + presenting complaint speech bubble
+    const hp = G.hover && G.state === 'playing' ? hitPatient(G.hover.x, G.hover.y) : null;
+    if ((hp ? hp.id : null) !== G.hoverPatientId) {
+      G.hoverPatientId = hp ? hp.id : null;
+      if (hp) {
+        el.tooltip.innerHTML = hp.diagnosed
+          ? `<b>"${hp.complaint || '…'}"</b><br/>${hp.def.name} — send to <b>${ROOM_TYPES[PATHOGENS[hp.typeKey].room].name.toUpperCase()}</b>.`
+          : `<b>"${hp.complaint || '…'}"</b><br/>UNDIAGNOSED — the tells might give it away, or wait for triage.`;
+      }
+    }
+    if (hp) {
+      ctx.strokeStyle = PALETTE.amber;
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(hp.x - 12, hp.y - 32, 24, 36);
+      ctx.globalAlpha = 1;
+      const lines = wrapText(hp.complaint || '…', 26);
+      const dx = hp.diagnosed
+        ? `${hp.def.name.toUpperCase()} → ${ROOM_TYPES[PATHOGENS[hp.typeKey].room].name.toUpperCase()}`
+        : null;
+      drawSpeechBubble(hp.x, hp.y - 56, lines, dx, 1);
+    }
+
     // Selection highlight + hint
     if (G.selection) {
       const o = G.selection.obj;
@@ -1028,12 +1066,12 @@
       ctx.globalAlpha = on ? 1 : 0.35;
       ctx.fillStyle = '#c8d8dc';
       ctx.fillRect(p.x - 14, p.y - 8, 28, 5);
-      drawPatientSprite(ctx, p.x, p.y - 6, 0, 'sick');
+      drawPatientSprite(ctx, p.x, p.y - 6, 0, 'sick', p.typeKey, G.time);
       ctx.globalAlpha = 1;
       return;
     }
     const mood = p.state === 'exiting' ? 'happy' : 'sick';
-    drawPatientSprite(ctx, p.x, p.y, G.time * 5 + p.bob, mood);
+    drawPatientSprite(ctx, p.x, p.y, G.time * 5 + p.bob, mood, p.typeKey, G.time + p.bob);
     if (p.state === 'exiting') return;                       // cured: no bars, no germ
 
     // The ailment — the actual enemy — rides above the patient.
@@ -1075,6 +1113,49 @@
     if (s.scribe) {
       drawUpgradeIcon(ctx, 'scribe', s.x + 10, s.y - 26, 0.6);
     }
+  }
+
+  function wrapText(str, maxChars) {
+    const words = String(str).split(' ');
+    const lines = [];
+    let cur = '';
+    for (const w of words) {
+      if ((cur + ' ' + w).trim().length > maxChars && cur) { lines.push(cur); cur = w; }
+      else cur = (cur + ' ' + w).trim();
+    }
+    if (cur) lines.push(cur);
+    return lines.slice(0, 3);
+  }
+
+  /* 8-bit speech bubble anchored above (x, y): white box, ink border,
+   * little tail. `dxLine` (optional) renders in blue under the quote. */
+  function drawSpeechBubble(x, y, lines, dxLine, alpha = 1) {
+    ctx.font = FONT;
+    const all = dxLine ? [...lines, dxLine] : lines;
+    const w = Math.max(...all.map(l => ctx.measureText(l).width)) + 12;
+    const h = all.length * 11 + 9;
+    let bx = Math.round(Math.min(Math.max(6, x - w / 2), canvas.width - w - 6));
+    let by = Math.round(Math.max(4, y - h));
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = PALETTE.ink;
+    ctx.fillRect(bx - 2, by - 2, w + 4, h + 4);
+    ctx.fillStyle = PALETTE.white;
+    ctx.fillRect(bx, by, w, h);
+    // tail
+    ctx.fillRect(Math.round(x) - 2, by + h, 4, 3);
+    ctx.fillStyle = PALETTE.ink;
+    ctx.fillRect(Math.round(x) - 3, by + h + 3, 6, 2);
+    ctx.textAlign = 'left';
+    lines.forEach((l, i) => {
+      ctx.fillStyle = PALETTE.ink;
+      ctx.fillText(l, bx + 6, by + 12 + i * 11);
+    });
+    if (dxLine) {
+      ctx.fillStyle = PALETTE.deepBlue;
+      ctx.fillText(dxLine, bx + 6, by + 12 + lines.length * 11);
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left';
   }
 
   function pulseGlow(x, y) {

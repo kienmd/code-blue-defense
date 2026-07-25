@@ -64,6 +64,8 @@ class Patient {
     this.bedIndex = -1;
     this.outcome = null;            // 'discharged' | 'transferred'
     this.aiTag = null;              // set by the Agentic Lab-Router
+    this.complaint = null;          // first-person flavor (js/agentic.js)
+    this.blurtT = 0;                // auto-blurt bubble timer on sit-down
     this.bob = Math.random() * Math.PI * 2;
     this.sporeTimer = SPORE_PULSE;
   }
@@ -150,10 +152,15 @@ class Room {
  * Pixel sprite painters
  * ============================================================ */
 
-function drawPatientSprite(ctx, cx, cy, bobPhase, mood = 'sick', gown = '#9fc4e8') {
+/* mood: 'sick' | 'happy'. typeKey adds the PRESENTING TELL — the
+ * skill-based visual hint that shows what's wrong before diagnosis
+ * (cracked helmet, chest clutch, green cough...). t drives tiny
+ * animations (shivers, cough pixels). */
+function drawPatientSprite(ctx, cx, cy, bobPhase, mood = 'sick', typeKey = null, t = 0) {
   const bob = Math.round(Math.sin(bobPhase) * 1.5);
+  const shiver = (mood === 'sick' && typeKey === 'flu') ? Math.round(Math.sin(t * 34) * 1) : 0;
   ctx.save();
-  ctx.translate(Math.round(cx), Math.round(cy + bob));
+  ctx.translate(Math.round(cx + shiver), Math.round(cy + bob));
   // head
   ctx.fillStyle = mood === 'sick' ? '#d8e0b0' : '#f2c8a8'; // green-tinged when ill
   ctx.fillRect(-3, -20, 6, 5);
@@ -162,7 +169,7 @@ function drawPatientSprite(ctx, cx, cy, bobPhase, mood = 'sick', gown = '#9fc4e8
   if (mood === 'happy') { ctx.fillRect(-2, -18, 1, 1); ctx.fillRect(1, -18, 1, 1); ctx.fillRect(-1, -16.5, 2, 1); }
   else { ctx.fillRect(-2, -18, 1, 1); ctx.fillRect(1, -18, 1, 1); }
   // gown
-  ctx.fillStyle = gown;
+  ctx.fillStyle = '#9fc4e8';
   ctx.fillRect(-5, -15, 10, 11);
   ctx.fillStyle = PALETTE.white;
   ctx.fillRect(-2, -13, 4, 4);
@@ -176,7 +183,52 @@ function drawPatientSprite(ctx, cx, cy, bobPhase, mood = 'sick', gown = '#9fc4e8
   // legs
   ctx.fillStyle = PALETTE.ink;
   ctx.fillRect(-4, -4, 3, 4); ctx.fillRect(1, -4, 3, 4);
+
+  if (mood === 'sick' && typeKey) drawPresentingTell(ctx, typeKey, t);
   ctx.restore();
+}
+
+/* The per-pathogen presenting tell, drawn in patient-local coords
+ * (origin at the feet). These read BEFORE diagnosis. */
+function drawPresentingTell(ctx, typeKey, t) {
+  if (typeKey === 'flu') {
+    ctx.fillStyle = PALETTE.brightRed;                      // rudolph nose
+    ctx.fillRect(-1, -18, 2, 2);
+    ctx.fillStyle = '#58d858';                              // sniffle drip
+    if (Math.sin(t * 4) > 0) ctx.fillRect(0, -16, 1, 2);
+  } else if (typeKey === 'bacteria') {
+    ctx.fillStyle = PALETTE.white;                          // bandaged arm...
+    ctx.fillRect(-8, -13, 3, 6);
+    ctx.fillStyle = '#7fb840';                              // ...gone green
+    ctx.fillRect(-8, -11, 3, 2);
+    ctx.fillStyle = PALETTE.ink;
+    ctx.fillRect(-8, -9, 3, 1);
+  } else if (typeKey === 'virus') {
+    ctx.fillStyle = '#ff5a5a';                              // spots everywhere
+    ctx.fillRect(-3, -19, 1, 1); ctx.fillRect(2, -18, 1, 1);
+    ctx.fillRect(-4, -12, 2, 2); ctx.fillRect(3, -10, 2, 2);
+    ctx.fillRect(-1, -7, 2, 2);
+  } else if (typeKey === 'spore') {
+    const drift = (t * 10) % 8;                             // green cough pixels
+    ctx.globalAlpha = 1 - drift / 8;
+    ctx.fillStyle = PALETTE.spore;
+    ctx.fillRect(4 + drift, -18 - drift * 0.4, 2, 2);
+    ctx.fillRect(6 + drift * 0.6, -15, 1, 1);
+    ctx.globalAlpha = 1;
+  } else if (typeKey === 'trauma') {
+    ctx.fillStyle = PALETTE.amber;                          // cracked bike helmet
+    ctx.fillRect(-4, -22, 8, 3);
+    ctx.fillStyle = PALETTE.ink;
+    ctx.fillRect(0, -22, 1, 3);                             // the crack
+    ctx.fillStyle = PALETTE.white;                          // arm sling
+    ctx.fillRect(-5, -13, 8, 2);
+    ctx.fillRect(2, -12, 2, 3);
+  } else if (typeKey === 'cardiac') {
+    ctx.fillStyle = '#f2c8a8';                              // hand clutching chest
+    ctx.fillRect(-1, -12, 4, 3);
+    ctx.fillStyle = PALETTE.brightRed;                      // pained blip
+    if (Math.sin(t * 6) > 0.3) ctx.fillRect(5, -20, 2, 2);
+  }
 }
 
 function drawStaffSprite(ctx, typeKey, cx, cy, bobPhase = 0) {
