@@ -1,36 +1,90 @@
-# Code Blue Defense
+# Code Blue Defense: Agentic Triage
 
-An 8-bit tower defense game set in a hospital. Waves of pathogens, outbreaks, and
-emergencies pour through the hospital corridors — you place medical staff and
-equipment as "towers" to triage, treat, and neutralize them before they reach
-the patients.
+An 8-bit retro tower-defense/management game built for a healthcare AI
+hackathon. The classic TD formula is flipped: **the "creeps" are patients**
+flowing through a hospital grid, deteriorating in real time — and you must
+deploy **human staff (physical towers)** and **agentic AI upgrades (virtual
+buffs)** to diagnose and discharge them before they crash or leak into the ICU.
 
-> **Status: ideation.** Nothing is built yet. The design brainstorm lives in
-> [`DESIGN.md`](./DESIGN.md).
+Zero dependencies, zero build step: vanilla HTML5 Canvas + JavaScript.
 
-## The pitch
+## Run it
 
-Classic lane-based tower defense mechanics, reskinned with surprising coherence
-onto a hospital:
+```bash
+# option 1: just open it
+open index.html
 
-- **Enemies** are germs, viruses, infections, and escalating medical crises.
-- **Towers** are nurses, doctors, machines (X-ray, defibrillator, UV sanitizer),
-  and departments (pharmacy, lab).
-- **The base you defend** is the patient ward / ICU.
-- **"Code Blue"** — the real hospital emergency code — is your all-hands panic
-  button when a wave breaks through.
+# option 2: any static server
+python3 -m http.server 8080   # then visit http://localhost:8080
+```
 
-## Planned vibe
+## How to play
 
-- 8-bit pixel art, chunky sprites, limited palette (hospital whites, scrub
-  greens, biohazard oranges).
-- Chiptune soundtrack that escalates with wave intensity; heart-monitor beeps
-  as the health/lives UI.
+- **Patients** walk the corridor from the entrance toward the **ICU Leak Gate**.
+  Each has a **health bar** (hits 0 → they crash, you lose a life) and a
+  **complexity shield** (reduce to 0 → discharged, you earn budget).
+- **Click a staff card, then click a tile beside the corridor** to place them.
+  Staff occupy limited **room** capacity (the Cardiologist takes a 2x2
+  footprint and 2 rooms).
+- Doctors accumulate **cognitive load** per patient treated. At 100% they
+  **burn out** and freeze for 8 seconds. The Inner-City ER level applies a
+  1.5x burnout modifier.
+- **Drag AI upgrades** from the shop onto their targets: the **Ambient AI
+  Scribe** onto a doctor, the **Agentic Lab-Router** onto the entrance, the
+  **Prior-Auth Agent** onto the ICU gate. AI takes no physical space — it
+  multiplies the humans you already have.
 
-## Repo layout (planned)
+## Roster
+
+| Unit | Cost | Effect |
+|---|---|---|
+| Triage Nurse | $100 | Slows patients 40% in radius, tags them ASSESSED |
+| General Practitioner | $200 | Steady complexity damage; burns out fast |
+| Cardiologist | $400 | Huge damage, targets the sickest patient; 2x2 footprint |
+| Ambient AI Scribe | $150 | On a doctor: -50% burnout gain, +30% speed |
+| Agentic Lab-Router | $250 | At the entrance: AI pre-triage shreds 30% complexity |
+| Prior-Auth Agent | $200 | At the ICU gate: +25% payout per discharge |
+
+Patient types range from the **Seasonal Flu** swarm and the **WebMD
+Over-thinker** (high complexity, barely sick) to the **Silent Heart Attack**
+(deteriorates fast, huge complexity) and **Trauma Wave** events.
+
+## Levels
+
+1. **Rural Clinic** — 2 rooms max, slow influx, flu season tutorial.
+2. **Suburban Urgent Care** — mid-size grid, TRAUMA WAVE event.
+3. **Inner-City ER** — overcrowding, 1.5x burnout, silent heart attacks.
+
+Angry-Birds-style star ratings (based on lives kept) gate level unlocks;
+progress persists in `localStorage`.
+
+## The agentic AI layer (for judges)
+
+`js/agentic.js` is the seam between the game and a real LLM. When the
+Lab-Router is installed, every arriving patient is serialized into a
+**Patient Manifest** and passed to `simulateAgenticDecision()`:
+
+- With `window.ANTHROPIC_API_KEY` set (see the comment in `index.html`), it
+  calls Claude with a pinned JSON output contract ("act as an ED triage agent;
+  output a priority 1-5 and diagnostic category").
+- Without a key it falls back to deterministic structured-data matching over
+  the same symptom table — the demo is fully self-contained offline.
+
+Design principle: **the LLM decides WHAT the patient has; the game decides
+how much that knowledge is worth.** The mechanical effect (a flat 30%
+complexity shred) is constant and auditable, so live-LLM nondeterminism can
+never unbalance the game. All balance math is centralized and commented in
+`js/constants.js`.
+
+## Repo layout
 
 ```
-DESIGN.md    — living game design document (ideation happens here)
-src/         — game code (engine TBD during ideation)
-assets/      — pixel art + chiptune audio
+index.html        entry point + optional API-key hook
+style.css         retro UI shell (Press Start 2P, NES-ish palette)
+js/constants.js   ALL balance numbers + judge-facing math comments
+js/agentic.js     LLM scaffold + local triage fallback
+js/levels.js      3 levels: grids, checkpoint paths, wave tables
+js/entities.js    Patient/Tower classes + pixel sprite painters
+js/game.js        engine loop, input, drag-drop, waves, render, HUD
+DESIGN.md         design ideation history
 ```

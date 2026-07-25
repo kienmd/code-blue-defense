@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Code Blue Defense: Agentic Triage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="topbar">
+      <div id="title-mini">CODE BLUE DEFENSE<span class="sub">: AGENTIC TRIAGE</span></div>
+      <div id="hud">
+        <span class="hud-item" id="hud-budget" title="Hospital Budget">$0</span>
+        <span class="hud-item" id="hud-lives" title="Patient lives remaining">&hearts; 0</span>
+        <span class="hud-item" id="hud-wave" title="Wave">WAVE 0/0</span>
+        <span class="hud-item" id="hud-rooms" title="Rooms used / max">ROOMS 0/0</span>
+      </div>
+    </header>
+
+    <main id="stage">
+      <canvas id="game" width="640" height="384"></canvas>
+
+      <!-- Level select overlay -->
+      <div id="level-select" class="overlay">
+        <h1>CODE BLUE DEFENSE</h1>
+        <h2>AGENTIC TRIAGE</h2>
+        <p class="tagline">Patients are deteriorating. Staff are finite.<br/>Deploy AI agents. Nobody crashes on your shift.</p>
+        <div id="level-cards"></div>
+        <p class="hint">Place staff next to the corridor. Drag AI upgrades onto staff, the entrance, or the ICU gate.</p>
+      </div>
+
+      <!-- Win / loss overlay -->
+      <div id="result" class="overlay hidden">
+        <h1 id="result-title">SHIFT COMPLETE</h1>
+        <div id="result-stars"></div>
+        <p id="result-detail"></p>
+        <div class="btn-row">
+          <button id="btn-retry" class="pxbtn">REPLAY</button>
+          <button id="btn-next" class="pxbtn primary">NEXT LEVEL</button>
+          <button id="btn-menu" class="pxbtn">LEVEL SELECT</button>
+        </div>
+      </div>
+
+      <!-- Wave / event banner -->
+      <div id="banner" class="hidden"></div>
+    </main>
+
+    <footer id="shop">
+      <div class="shop-group">
+        <div class="shop-label">HUMAN STAFF <span class="shop-note">(click, then click a tile)</span></div>
+        <div class="shop-items" id="shop-towers"></div>
+      </div>
+      <div class="shop-group">
+        <div class="shop-label">AGENTIC AI <span class="shop-note">(drag onto target)</span></div>
+        <div class="shop-items" id="shop-upgrades"></div>
+      </div>
+      <div class="shop-group" id="tooltip-box">
+        <div class="shop-label">INFO</div>
+        <div id="tooltip">Select a unit to see details.</div>
+      </div>
+    </footer>
+  </div>
+
+  <div id="drag-ghost" class="hidden"></div>
+
+  <!--
+    Optional live-LLM mode for hackathon demos:
+    define window.ANTHROPIC_API_KEY before game scripts load and the
+    Agentic Lab-Router will call Claude for real triage decisions.
+    Without a key it uses the deterministic local fallback in js/agentic.js.
+    <script>window.ANTHROPIC_API_KEY = "sk-ant-...";</script>
+  -->
+  <script src="js/constants.js"></script>
+  <script src="js/agentic.js"></script>
+  <script src="js/levels.js"></script>
+  <script src="js/entities.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
