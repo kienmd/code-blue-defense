@@ -1,0 +1,5 @@
+# Local secrets — if you ever put API keys in a file, use this path;
+# it NEVER gets committed.
+js/keys.local.js
+
+.DS_Store

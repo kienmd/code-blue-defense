@@ -142,3 +142,40 @@ TD is replaced by a **buildable hospital cross-section**:
   6 pathogen types each route to a specific room; diagnosis gates
   routing; Lab-Router becomes an auto-triage agent. Option B heal-flip
   + empathy presentation carry over wholesale.
+- 2026-07-24 — Rounds made explicit: each shift ends with a SHIFT REPORT
+  popup (stats + income/expense ledger), then a player-paced COOL-OFF
+  (no arrivals; build/hire freely) ended by a START SHIFT button. The
+  old PREP_SECONDS auto-timer is gone. Progressive growth: rooms
+  auto-place (no slot picking), floors reveal as built, and the camera
+  zooms dynamically (in when small, out as the building grows).
+- 2026-07-24 — ERA SYSTEM locked (docs/ERAS.md): thirteen shifts march
+  1950s → Y3K, each opened by a decade title card (sits ~4s,
+  click-to-skip, arrivals hold). Compressed from ERAS.md's 14+bonus per
+  the pacing note (1970s+80s merged, single 2020s) so the AI eras land
+  ~6-8 minutes in. Each era: stat mods (diag/stress/treat/lobby-decay),
+  free autoDiag (2030s+) / autoAssign (2050s+) baselines, inflation on
+  all prices+payouts, era-locked AI shop cards, and visuals — staff
+  scrub palettes, wall tints, and a roofline that ages (brick chimney →
+  water tower → HVAC → glass → helipad → holo-spire). Decade
+  transitions are gated by a mandatory ERA REPORT learning popup: the
+  age's real tech, its real-world impact, and the exact stat deltas.
+- 2026-07-24 — ECONOMY locked (docs/ECONOMY.md supersedes the earlier
+  "realistic budgeting" note): four faucets (outcome-scaled
+  reimbursements x1.0/x0.8/x0.7, copay floor, inverse-performance era
+  grants, opt-in private wing x1.3-with-settlements), recurring drains
+  (per-shift salaries + 2% upkeep settled at shift end), x1.5
+  escalating build costs per repeat room type, and fairness rails (soft
+  accounts-payable debt, county bailout — first free, later ones cost
+  stars; lives and cash never cross except the opted-in private wing).
+  START_BUDGET $500K. The shift report carries the full ledger.
+- 2026-07-24 — Staff roster expanded (Surgeon: x1.8 in Surgery only;
+  Orderly: lobby calming) + capability model locked: "not everyone can
+  diagnose" — doctor formal DIAGNOSIS (2s), nurse preliminary
+  ASSESSMENT (4s), everyone else refused lobby triage; the Lab-Router
+  (and 2030s+ era baselines) is the only non-human diagnosis path.
+- 2026-07-24 — UX pass: fully opaque title/menu screens (game world
+  reveals after START), left-side inspector codex on every shop card
+  (big icon, flavor, exact stats, unlock/owned status), narrator
+  switched to the default en-US system voice with a VOICE cycle button
+  (persisted), wait-time counters over waiting patients, per-patient
+  sprite variety (skin/hair/gown palettes).

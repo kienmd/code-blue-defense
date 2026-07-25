@@ -1,10 +1,11 @@
-# Code Blue Defense: Agentic Triage
+# Code Blue Defense: Ward Shift
 
-An 8-bit retro tower-defense/management game built for a healthcare AI
-hackathon. The classic TD formula is flipped: **the "creeps" are patients**
-flowing through a hospital grid, deteriorating in real time — and you must
-deploy **human staff (physical towers)** and **agentic AI upgrades (virtual
-buffs)** to diagnose and discharge them before they crash or leak into the ICU.
+An 8-bit hospital-management game built for a healthcare AI hackathon.
+Fallout Shelter-style cross-section: **patients are the "creeps," pathogens
+are the enemies**. Build rooms, hire staff, diagnose the ailment, allocate
+the bed — and cure everyone before the disease wins. Across thirteen shifts
+the hospital marches from the **1950s to the year 3000**, and in the late
+decades the **agentic AI upgrades** arrive to multiply your humans.
 
 Zero dependencies, zero build step: vanilla HTML5 Canvas + JavaScript.
 
@@ -20,71 +21,123 @@ python3 -m http.server 8080   # then visit http://localhost:8080
 
 ## How to play
 
-- **Patients** walk the corridor from the entrance toward the **ICU Leak Gate**.
-  Each has a **health bar** (hits 0 → they crash, you lose a life) and a
-  **complexity shield** (reduce to 0 → discharged, you earn budget).
-- **Click a staff card, then click a tile beside the corridor** to place them.
-  Staff occupy limited **room** capacity (the Cardiologist takes a 2x2
-  footprint and 2 rooms).
-- Doctors accumulate **cognitive load** per patient treated. At 100% they
-  **burn out** and freeze for 8 seconds. The Inner-City ER level applies a
-  1.5x burnout modifier.
-- **Drag AI upgrades** from the shop onto their targets: the **Ambient AI
-  Scribe** onto a doctor, the **Agentic Lab-Router** onto the entrance, the
-  **Prior-Auth Agent** onto the ICU gate. AI takes no physical space — it
-  multiplies the humans you already have.
+- **Build rooms** from the shop — they auto-place Fallout Shelter-style
+  (floor 1 fills left-to-right, then the hospital grows a floor). Repeat
+  copies of the same room type cost x1.5 each, so diversify.
+- **Hire staff**, then click a room (or the lobby) to post them.
+  **Not everyone can diagnose**: doctors make a formal lobby DIAGNOSIS
+  fast, nurses do a slower preliminary ASSESSMENT, and everyone else
+  (surgeon, orderly) is refused lobby triage outright.
+- **Patients** arrive with a presenting complaint (hover them to hear it).
+  Once diagnosed, **click the patient, then a room** to allocate their bed.
+  The right room treats at full rate; wrong rooms limp along.
+- **Deterioration** is the clock: a patient's health hits 0 → ICU transfer
+  (a life lost). ICU capacity is 5 for the whole run.
+- **Shifts are rounds.** Each ends with a SHIFT REPORT (including a full
+  income/expense ledger), then a player-paced COOL-OFF for building. When
+  the next shift crosses a decade, a mandatory ERA REPORT teaches what the
+  age invented and exactly how it changes your numbers.
+- **Drag AI upgrades** (2020s+) onto their targets: the **Ambient AI
+  Scribe** onto a staffer, the **Agentic Lab-Router** onto the lobby, the
+  **Prior-Auth Agent** onto the door. Locked cards show their unlock era —
+  click any card for the full stats codex.
+
+## The economy (docs/ECONOMY.md)
+
+Money enters through four faucets and leaves through recurring drains, so
+every cool-off is a real resourcing decision:
+
+- **Case reimbursements** — outcome-scaled: right-room discharge x1.0,
+  wrong-room cure x0.8, undiagnosed cure x0.7 ("no chart, no charge").
+- **Walk-in copays** — a small floor faucet; a shift never grosses $0.
+- **Era modernization grants** — at each era-up, scaled UP the worse you're
+  doing (Hill-Burton / HITECH flavor): a gentle catch-up rail.
+- **Private-wing contract** — opt-in per shift: payouts x1.3, but every ICU
+  transfer costs a settlement. The only place lives ever cost money, and
+  you chose it.
+- **Drains** — per-shift salaries and 2% room upkeep, settled at shift end.
+  Shortfalls never block you: they carry as ACCOUNTS PAYABLE (soft debt).
+  If you're ever stranded below one hire, a county bailout tops you up —
+  the first is free, the rest cost stars.
+- **Era inflation** scales all prices and payouts (x0.5 in the 1950s →
+  x10 by Y3K) without changing the ratios that set difficulty.
 
 ## Roster
 
-| Unit | Cost | Effect |
-|---|---|---|
-| Triage Nurse | $100 | Slows patients 40% in radius, tags them ASSESSED |
-| General Practitioner | $200 | Steady complexity damage; burns out fast |
-| Cardiologist | $400 | Huge damage, targets the sickest patient; 2x2 footprint |
-| Ambient AI Scribe | $150 | On a doctor: -50% burnout gain, +30% speed |
-| Agentic Lab-Router | $250 | At the entrance: AI pre-triage shreds 30% complexity |
-| Prior-Auth Agent | $200 | At the ICU gate: +25% payout per discharge |
+| Unit | Role |
+|---|---|
+| Nurse | Cheap generalist; slow lobby ASSESSMENT; low burnout |
+| Doctor | Fast treatment + the proper 2s lobby DIAGNOSIS; burns out fast |
+| Surgeon | x1.8 in Surgery, half-speed elsewhere; cannot diagnose |
+| Orderly | Lobby duty: calms waiting patients (-15% decay each); cannot diagnose |
+| Ambient AI Scribe (2020s) | On a staffer: -50% burnout gain, +30% speed |
+| Agentic Lab-Router (2030s) | On the lobby: instant AI diagnosis + auto-assign |
+| Prior-Auth Agent (2020s) | On the door: +25% payout per discharge |
 
-Patient types range from the **Seasonal Flu** swarm and the **WebMD
-Over-thinker** (high complexity, barely sick) to the **Silent Heart Attack**
-(deteriorates fast, huge complexity) and **Trauma Wave** events.
+**Rooms:** General Ward (flu), Pharmacy (bacteria), Virology Lab
+(virus + airborne spore isolation), Surgery (trauma), Cardiology (cardiac
+events), Break Room (staff stress recovery). Airborne spores are contagious
+in the waiting room — isolate them fast.
 
-## Levels
+## The era march (docs/ERAS.md)
 
-1. **Rural Clinic** — 2 rooms max, slow influx, flu season tutorial.
-2. **Suburban Urgent Care** — mid-size grid, TRAUMA WAVE event.
-3. **Inner-City ER** — overcrowding, 1.5x burnout, silent heart attacks.
-
-Angry-Birds-style star ratings (based on lives kept) gate level unlocks;
-progress persists in `localStorage`.
+Thirteen shifts, one decade-defining title card each: 1950s → 1960s →
+1970s-80s → 1990s → 2000s → 2010s → 2020s → 2030s → 2040s → 2050s → 2075 →
+2100 → Y3K. Each era silently upgrades the standard of care (faster
+diagnosis, better treatment, less burnout), re-tints the walls and scrubs,
+ages the roofline (brick chimney → water tower → HVAC → glass → helipad →
+holo-spire), and — from the 2030s — makes AI diagnosis the free baseline.
 
 ## The agentic AI layer (for judges)
 
 `js/agentic.js` is the seam between the game and a real LLM. When the
-Lab-Router is installed, every arriving patient is serialized into a
-**Patient Manifest** and passed to `simulateAgenticDecision()`:
+Lab-Router is installed (or the 2030s arrive), every arriving patient is
+serialized into a **Patient Manifest** and passed to
+`simulateAgenticDecision()`:
 
 - With `window.ANTHROPIC_API_KEY` set (see the comment in `index.html`), it
-  calls Claude with a pinned JSON output contract ("act as an ED triage agent;
-  output a priority 1-5 and diagnostic category").
-- Without a key it falls back to deterministic structured-data matching over
-  the same symptom table — the demo is fully self-contained offline.
+  calls Claude with a pinned JSON output contract, and patient complaints
+  are LLM-written too.
+- Without a key it falls back to deterministic structured-data matching
+  over the same symptom table — the demo is fully self-contained offline.
 
 Design principle: **the LLM decides WHAT the patient has; the game decides
-how much that knowledge is worth.** The mechanical effect (a flat 30%
-complexity shred) is constant and auditable, so live-LLM nondeterminism can
-never unbalance the game. All balance math is centralized and commented in
-`js/constants.js`.
+how much that knowledge is worth.** All balance math is centralized and
+commented in `js/constants.js`.
 
 ## Repo layout
 
 ```
-index.html        entry point + optional API-key hook
+index.html        entry shell + optional API-key hook + script load order
 style.css         retro UI shell (Press Start 2P, NES-ish palette)
-js/constants.js   ALL balance numbers + judge-facing math comments
-js/agentic.js     LLM scaffold + local triage fallback
-js/levels.js      3 levels: grids, checkpoint paths, wave tables
-js/entities.js    Patient/Tower classes + pixel sprite painters
-js/game.js        engine loop, input, drag-drop, waves, render, HUD
-DESIGN.md         design ideation history
+js/constants.js   ALL balance numbers: eras, economy, rooms, staff, AI
+js/agentic.js     LLM scaffold + local triage/complaint fallback
+js/levels.js      13-shift arrival schedule
+js/entities.js    Patient/Staff/Room classes + pixel sprite painters
+js/audio.js       WebAudio chiptune synth + theme + SFX
+js/narrator.js    speechSynthesis narrator + script table + subtitles
+js/state.js       the mutable game state G + query helpers
+js/ui.js          DOM/HUD/shop/report/era-report/inspector
+js/sim.js         run lifecycle, shift engine, treatment, economy settle
+js/input.js       canvas mouse/keyboard + AI drag-drop (inverse camera)
+js/render.js      the whole frame: building, eras, entities, era card
+js/main.js        boot + rAF loop
+docs/ERAS.md      canonical decade research + per-era design
+docs/ECONOMY.md   canonical economy spec (faucets/drains/lanes/rails)
+docs/TECH_TREE.md era tech-shop research
+DESIGN.md         design ideation history + decision log
 ```
+
+## Audio & narration
+
+The narrator speaks through the browser's built-in **speechSynthesis**
+(default: a natural en-US system voice, pinned in `localStorage`), with
+**always-on subtitles**. The **VOICE** button in the topbar cycles through
+your system's best few voices; SND ON/OFF mutes everything. The chiptune
+theme ducks while he speaks. `js/narrator.js` carries a disabled
+ElevenLabs TTS seam as a possible future upgrade — nothing is wired to it.
+
+The only optional key is Anthropic, for live-LLM triage decisions and
+patient complaints (deterministic offline tables run otherwise): define
+`window.ANTHROPIC_API_KEY` before the game scripts load (see the comment
+block in `index.html`). Never commit keys.
