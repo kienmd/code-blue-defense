@@ -176,6 +176,37 @@ canvas#game {
 #banner.info { color: var(--blue); border-color: var(--blue); background: rgba(8, 14, 26, .92); animation: none; }
 @keyframes bannerflash { 50% { opacity: .55; } }
 
+/* ---------- Narrator subtitle ---------- */
+#subtitle {
+  position: absolute;
+  bottom: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 70%;
+  padding: 8px 16px;
+  font-size: 9px;
+  line-height: 1.8;
+  color: #f0e6c8;
+  background: rgba(6, 10, 22, .88);
+  border: 2px solid #7a6a3a;
+  text-align: center;
+  z-index: 14;
+  font-style: italic;
+}
+
+#narrator-setup { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+#narrator-key {
+  font-family: var(--font);
+  font-size: 8px;
+  width: 300px;
+  padding: 6px 8px;
+  color: var(--ink);
+  background: #0e1428;
+  border: 2px solid var(--panel-edge);
+  outline: none;
+}
+#narrator-key:focus { border-color: var(--blue); }
+
 /* ---------- Shop: one slim strip — the hospital is the star ---------- */
 #shop {
   flex: 0 0 auto;

@@ -27,6 +27,7 @@ function startRun() {
   el.menu.classList.add('hidden');
   el.result.classList.add('hidden');
   el.report.classList.add('hidden');
+  narratorReset();
   showBanner('BUILD A WARD + HIRE A NURSE<br/>THEN START SHIFT 1', 'info', 4);
   refreshShop();
   refreshShiftButton();
@@ -60,7 +61,9 @@ function startShift() {
   if (era !== prevEra) {
     G.eraCard = { t: 0, label: era.label, sub: era.sub, body: era.body };
     G.sfx('era');
+    narrate(`era_${era.label}`, { always: true });
   }
+  if (G.shiftIdx === SHIFTS.length - 1) narrate('finalShift');
   if (shift.banner) { showBanner(shift.banner, 'alert', 3); G.sfx('siren'); }
 }
 
@@ -74,6 +77,7 @@ function endRun(won) {
   }
   showResult(won, stars);
   refreshShiftButton();
+  narrate(won ? 'win' : 'lose', { always: true });
   if (won) { playSfx('discharge'); setTimeout(() => playSfx('buy'), 200); } else { playSfx('transfer'); }
 }
 
@@ -98,6 +102,7 @@ function spawnPatient(type) {
   p.waitIndex = spot;
   p.path = [{ x: waitSpotX(spot), y: floorWalkY(0) }];
   G.patients.push(p);
+  narrate('firstPatient');
 
   // Presenting complaint: fire-and-forget flavor (LLM or canned table).
   generateComplaint(p).then(line => { if (!p.outcome) p.complaint = line; });
@@ -305,6 +310,7 @@ function dischargePatient(p) {
   G.addText(p.x, p.y - 34, `CURED! +$${pay}`, PALETTE.green, 1.6);
   burstConfetti(p.x, p.y - 20);
   G.sfx('discharge');
+  narrate('firstDischarge');
   refreshShop();
 }
 
@@ -318,6 +324,7 @@ function transferPatient(p) {
   p.transferT = 1.4;
   G.addText(p.x, p.y - 34, 'ICU TRANSFER', PALETTE.brightRed, 2);
   G.sfx('transfer');
+  narrate('firstTransfer');
 }
 
 function updateStaff(dt) {
@@ -345,6 +352,7 @@ function updateStaff(dt) {
           p.diagnosed = true;
           G.addText(p.x, p.y - 34, `DIAGNOSED: ${p.def.name.toUpperCase()}`, PALETTE.blue, 1.6);
           G.sfx('diagnose');
+          narrate('firstDiagnosis');
           s.diagPatient = null;
           s.diagT = 0;
         }
@@ -362,6 +370,7 @@ function updateStaff(dt) {
         G.shiftStats.burnouts++;
         G.addText(s.x, s.y - 36, 'BURNOUT!', PALETTE.red, 1.6);
         G.sfx('burnout');
+        narrate('firstBurnout');
       }
     } else {
       s.stress = Math.max(0, s.stress - (STRESS_IDLE_REGEN + brRegen) * dt);
@@ -408,7 +417,10 @@ function updateContagion(dt) {
         G.particles.push({ x: other.x, y: other.y - 20, vx: 0, vy: -8, t: 0, life: 0.7, color: PALETTE.spore, kind: 'puff' });
       }
       G.particles.push({ x: p.x, y: p.y - 24, vx: 0, vy: -12, t: 0, life: 1, color: PALETTE.spore, kind: 'puff' });
-      if (waitingPatients().length > 1) G.addText(p.x, p.y - 40, 'SPREADING!', PALETTE.spore, 1);
+      if (waitingPatients().length > 1) {
+        G.addText(p.x, p.y - 40, 'SPREADING!', PALETTE.spore, 1);
+        narrate('sporeOutbreak');
+      }
     }
   }
 }
