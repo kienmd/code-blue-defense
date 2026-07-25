@@ -17,14 +17,24 @@
         <span class="hud-item" id="hud-lives" title="ICU capacity remaining">ICU</span>
         <span class="hud-item" id="hud-shift" title="Shift">PREP</span>
         <span class="hud-item" id="hud-waiting" title="Patients in the waiting room">WAITING 0</span>
+        <button id="btn-mute" class="hud-item hud-btn" title="Toggle sound">SND ON</button>
       </div>
     </header>
 
     <main id="stage">
       <canvas id="game" width="1240" height="620"></canvas>
 
+      <!-- Intro / title screen (shown first; one click through) -->
+      <div id="intro" class="overlay">
+        <h1 class="intro-title">CODE BLUE DEFENSE</h1>
+        <h2>WARD SHIFT</h2>
+        <canvas id="ekg" width="360" height="70"></canvas>
+        <p id="intro-prompt" class="prompt">CLICK TO START</p>
+        <p class="hint">SOUND ON RECOMMENDED &middot; 8-BIT CHIPTUNE INSIDE</p>
+      </div>
+
       <!-- Main menu overlay -->
-      <div id="menu" class="overlay">
+      <div id="menu" class="overlay hidden">
         <h1>CODE BLUE DEFENSE</h1>
         <h2>WARD SHIFT</h2>
         <p class="tagline">Build the hospital. Diagnose the pathogen. Allocate the bed.<br/>

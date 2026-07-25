@@ -37,6 +37,9 @@ const el = {
   shopUpgrades: document.getElementById('shop-upgrades'),
   tooltip: document.getElementById('tooltip'),
   dragGhost: document.getElementById('drag-ghost'),
+  intro: document.getElementById('intro'),
+  ekg: document.getElementById('ekg'),
+  btnMute: document.getElementById('btn-mute'),
 };
 
 /* ---------- Banner ---------- */

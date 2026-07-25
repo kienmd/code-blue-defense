@@ -51,6 +51,9 @@ html, body {
 
 #hud { display: flex; gap: 8px; font-size: 9px; flex: 0 0 auto; white-space: nowrap; }
 .hud-item { padding: 3px 6px; background: #0e1428; border: 2px solid var(--panel-edge); }
+.hud-btn { font-family: var(--font); font-size: 9px; color: var(--ink); cursor: pointer; }
+.hud-btn:hover { border-color: var(--blue); color: var(--blue); }
+.hud-btn.off { color: #66788e; }
 #hud-budget { color: var(--green); }
 #hud-lives { color: var(--red); }
 #hud-shift { color: var(--blue); }
@@ -95,6 +98,11 @@ canvas#game {
 .overlay.hidden, .hidden { display: none !important; }
 
 .overlay h1 { font-size: 26px; color: var(--blue); text-shadow: 4px 4px 0 #06264a; }
+#intro { cursor: pointer; z-index: 30; }
+#intro .intro-title { font-size: 34px; animation: titlepulse 2s steps(2) infinite; }
+@keyframes titlepulse { 50% { text-shadow: 4px 4px 0 #06264a, 0 0 18px rgba(74,163,223,.55); } }
+#ekg { image-rendering: pixelated; border: 3px solid var(--panel-edge); background: #060c18; }
+#intro .prompt { font-size: 12px; color: var(--amber); animation: bannerflash .9s steps(2) infinite; }
 .overlay h2 { font-size: 14px; color: var(--red); letter-spacing: 2px; }
 .overlay .tagline { font-size: 9px; line-height: 1.9; color: #9fb4c8; }
 .overlay .hint { font-size: 8px; color: #6d7f95; line-height: 1.8; max-width: 560px; }
