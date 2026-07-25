@@ -69,10 +69,12 @@ Recommended: ship the first three; hold billing leakage as a difficulty
 option. The LOST CHART chime should be mildly infuriating by design.
 
 > **GATING REVISED:** era unlocks are now DECADE-GATED per `docs/ERAS.md`
-> (the run advances 1950s → 2030s, one decade per shift; techs appear in the
-> shop when their real-world decade arrives). The "own any 2 to advance"
-> rule below is retired; era tiers remain as shop section labels. The only
-> purchase dependency kept: software techs (Era 2+) require EHR TERMINAL.
+> (the run advances 1950s → 2100 plus a Year 3000 bonus round; techs appear
+> in the shop when their era arrives). The "own any 2 to advance" rule below
+> is retired; era tiers remain as shop section labels. The only purchase
+> dependency kept: software techs (Era 2+) require EHR TERMINAL. Future-era
+> shop items (MED-DRONE BAY through NANOBOT IMMUNE SWARM) extend this tree
+> and are specified in `docs/ERAS.md`.
 
 ## Era 1 — DIGITAL BACKBONE
 
@@ -208,7 +210,7 @@ carry over untouched; costs/effects unchanged except where noted.
   and route them to the right level of care — in one 2026 study, the share
   of patients arriving at the appropriate care setting more than doubled."
 
-### AGENTIC ROUTER — cost $400 — unique, sits on the lobby *(existing `labRouter`, renamed; 2030s finale — unlocks shift 10)*
+### AGENTIC ROUTER — cost $400 — unique, sits on the lobby *(existing `labRouter`, renamed; unlocks with the 2030s, shift 10)*
 - **Teaches:** autonomous care orchestration — the multi-agent endgame.
 - **Flavor:** *"the frontier: agentic AI orchestration"*
 - **Effect:** unchanged — instant AI diagnosis of every arrival + auto-assign
@@ -244,8 +246,10 @@ carry over untouched; costs/effects unchanged except where noted.
                     |
 2020s      ERA 4  AMBIENT SCRIBE  AI TRIAGE KIOSK  PRIOR-AUTH AGENT  REVCYCLE BOT
  (shifts 8-9)       |
-2030s      FINALE AGENTIC ROUTER
- (shift 10)
+2030s      ERA 5  AGENTIC ROUTER
+ (shift 10)         |
+2040s-Y3K  FUTURE  MED-DRONE BAY ... NANOBOT IMMUNE SWARM (see docs/ERAS.md)
+ (shifts 11-15)
 ```
 
 Full tree cost ≈ $3,500 (incl. the four ERAS.md stepping stones, + scribes
