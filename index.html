@@ -82,10 +82,19 @@
     Without a key it uses the deterministic local fallback in js/agentic.js.
     <script>window.ANTHROPIC_API_KEY = "sk-ant-...";</script>
   -->
+  <!-- Plain scripts, shared global scope, load order matters:
+       data (constants/agentic/levels/entities) -> audio -> state ->
+       ui -> sim -> input -> render -> main (boot). -->
   <script src="js/constants.js"></script>
   <script src="js/agentic.js"></script>
   <script src="js/levels.js"></script>
   <script src="js/entities.js"></script>
-  <script src="js/game.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/sim.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/main.js"></script>
 </body>
 </html>
