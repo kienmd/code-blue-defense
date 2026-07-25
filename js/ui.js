@@ -50,6 +50,13 @@ const el = {
   ekg: document.getElementById('ekg'),
   btnMute: document.getElementById('btn-mute'),
   btnVoice: document.getElementById('btn-voice'),
+  inspector: document.getElementById('inspector'),
+  inspClose: document.getElementById('insp-close'),
+  inspIcon: document.getElementById('insp-icon'),
+  inspName: document.getElementById('insp-name'),
+  inspFlavor: document.getElementById('insp-flavor'),
+  inspStats: document.getElementById('insp-stats'),
+  inspStatus: document.getElementById('insp-status'),
 };
 
 /* ---------- Banner ---------- */
@@ -179,6 +186,74 @@ function showResult(won, stars) {
   el.result.classList.remove('hidden');
 }
 
+/* ---------- Inspector (left-side codex) ----------
+ * Clicking ANY shop card — room, staff, AI tech, locked or owned —
+ * opens a close-up: big pixel icon, flavor, exact mechanical stats,
+ * cost, and unlock/owned status. */
+function showInspector(kind, key) {
+  const ictx = el.inspIcon.getContext('2d');
+  ictx.imageSmoothingEnabled = false;
+  ictx.clearRect(0, 0, 96, 96);
+  ictx.save();
+  ictx.translate(48, kind === 'staff' ? 78 : 52);
+  ictx.scale(3.4, 3.4);
+  if (kind === 'room') drawRoomIcon(ictx, key, 0, 0);
+  else if (kind === 'staff') drawStaffSprite(ictx, key, 0, 0);
+  else drawUpgradeIcon(ictx, key, 0, 0);
+  ictx.restore();
+
+  const stat = (label, val) => `<div>${label}: <b>${val}</b></div>`;
+  let def, stats = '', status = '', statusCls = 'ok';
+
+  if (kind === 'room') {
+    def = ROOM_TYPES[key];
+    const owned = G.rooms.filter(r => r.typeKey === key).length;
+    stats =
+      stat('BUILD COST', fmtMoney(roomBuildCost(key)) + (def.support ? '' : ' (x1.5/COPY)')) +
+      stat('UPKEEP', `${fmtMoney(Math.round(def.cost * UPKEEP_RATE * currentEra().inflation))}/SHIFT`) +
+      (def.support
+        ? stat('EFFECT', `+${BREAKROOM_REGEN} STRESS RECOVERY/SEC (MAX ${BREAKROOM_CAP})`)
+        : stat('BEDS', def.beds) + stat('STAFF SLOTS', def.staffSlots)) +
+      (Object.entries(PATHOGENS).some(([, p]) => p.room === key)
+        ? stat('TREATS', Object.values(PATHOGENS).filter(p => p.room === key).map(p => p.name.toUpperCase()).join(', '))
+        : '');
+    status = owned ? `OWNED: ${owned}` : 'NOT BUILT YET';
+  } else if (kind === 'staff') {
+    def = STAFF_TYPES[key];
+    const owned = G.staffList.filter(s => s.typeKey === key).length;
+    stats =
+      stat('HIRE (SIGNING)', fmtMoney(inflatedCost(def.cost))) +
+      stat('SALARY', `${fmtMoney(Math.round(def.salary * currentEra().inflation))}/SHIFT`) +
+      stat('TREAT RATE', `${def.treatRate}/SEC`) +
+      stat('DIAGNOSIS', def.canDiagnose ? `${diagCapability(def)} — ${def.diagSeconds}S` : 'NO (CANNOT DIAGNOSE)') +
+      stat('STRESS', `${def.stressPerSec}/SEC WORKING`) +
+      (def.specialty ? stat('SPECIALTY', `${def.specialty.toUpperCase()} x${def.specialtyMult} (ELSEWHERE x${def.offSpecialtyMult})`) : '') +
+      (def.lobbyCalm ? stat('LOBBY DUTY', `WAITING DECAY x${def.lobbyCalm} EACH (MAX ${ORDERLY_LOBBY_CAP})`) : '');
+    status = owned ? `ON PAYROLL: ${owned}` : 'NONE HIRED';
+  } else {
+    def = UPGRADE_TYPES[key];
+    const locked = upgradeLocked(def);
+    stats =
+      stat('COST', fmtMoney(inflatedCost(def.cost))) +
+      stat('TARGET', def.target.toUpperCase()) +
+      (def.rateMult ? stat('TREAT SPEED', `x${def.rateMult}`) : '') +
+      (def.stressMult ? stat('BURNOUT GAIN', `x${def.stressMult}`) : '') +
+      (def.payoutMult ? stat('PAYOUTS', `x${def.payoutMult}`) : '') +
+      (key === 'labRouter' ? stat('EFFECT', 'INSTANT AI DIAGNOSIS + AUTO-ASSIGN') : '') +
+      (def.unlockShift != null ? stat('UNLOCK ERA', eraForShift(def.unlockShift).label) : '');
+    if (locked) { status = `LOCKED — UNLOCKS ${eraForShift(def.unlockShift).label}`; statusCls = 'locked'; }
+    else if (def.unique && G.upgrades[key]) status = 'INSTALLED & ACTIVE';
+    else status = key === 'scribe' ? `DEPLOYED: ${G.staffList.filter(s => s.scribe).length}` : 'AVAILABLE — DRAG TO DEPLOY';
+  }
+
+  el.inspName.textContent = def.name.toUpperCase();
+  el.inspFlavor.textContent = def.desc;
+  el.inspStats.innerHTML = stats;
+  el.inspStatus.textContent = status;
+  el.inspStatus.className = statusCls;
+  el.inspector.classList.remove('hidden');
+}
+
 /* ---------- Shop strip ---------- */
 const shopButtons = { rooms: {}, staff: {}, upgrades: {} };
 
@@ -193,7 +268,7 @@ function iconCanvas(draw) {
   return c;
 }
 
-function makeShopItem(parent, iconDraw, name, cost, tooltipHtml, onActivate, drag) {
+function makeShopItem(parent, iconDraw, name, cost, tooltipHtml, onActivate, drag, inspect) {
   const item = document.createElement('div');
   item.className = 'shop-item' + (drag ? ' upgrade' : '');
   item.appendChild(iconCanvas(iconDraw));
@@ -201,6 +276,7 @@ function makeShopItem(parent, iconDraw, name, cost, tooltipHtml, onActivate, dra
     `<div class="si-name">${name.toUpperCase()}</div><div class="si-cost">${fmtMoney(cost)}</div>`);
   item.addEventListener(drag ? 'mousedown' : 'click', evt => {
     ensureAudio();
+    if (inspect) inspect();                    // the codex opens either way
     if (item.classList.contains('locked')) { G.sfx('denied'); return; }
     if (item.classList.contains('disabled') || item.classList.contains('soldout')) { G.sfx('denied'); return; }
     onActivate(evt, item);
@@ -235,6 +311,8 @@ function buildShop() {
       `<b>${def.name}</b> — ${def.desc} Builds instantly in the next open slot.` +
         ` Upkeep ${fmtMoney(def.cost * UPKEEP_RATE)}/shift${def.support ? '' : '; repeat copies cost x1.5'}.`,
       () => { G.selection = null; buildRoom(key); },
+      false,
+      () => showInspector('room', key),
     );
   }
   for (const [key, def] of Object.entries(STAFF_TYPES)) {
@@ -245,6 +323,8 @@ function buildShop() {
       `<b>${def.name}</b> — ${def.desc}` +
         ` DIAGNOSIS: ${diagCapability(def)}. Salary ${fmtMoney(def.salary)}/shift.`,
       () => hireStaff(key),
+      false,
+      () => showInspector('staff', key),
     );
   }
   for (const [key, def] of Object.entries(UPGRADE_TYPES)) {
@@ -255,6 +335,7 @@ function buildShop() {
       `<b>${def.name}</b> — ${def.desc}`,
       evt => startUpgradeDrag(key, evt),
       true,
+      () => showInspector('upgrade', key),
     );
   }
 }

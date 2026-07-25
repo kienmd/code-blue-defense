@@ -34,6 +34,8 @@ el.btnEraContinue.addEventListener('click', () => {
   else refreshShiftButton();
 });
 
+el.inspClose.addEventListener('click', () => el.inspector.classList.add('hidden'));
+
 // Private-wing risk lever: arm during cool-off, applies to the next shift.
 el.btnWing.addEventListener('click', () => {
   ensureAudio();
