@@ -467,11 +467,31 @@ Era 2; own any 2 to advance"). One coherent scheme across both docs:
 - **`style.css` / `index.html`**: popup styles only if the DOM-overlay modal
   option from TECH_TREE.md is chosen; otherwise none.
 
+Additions for the future-era extension (same PR or a follow-up):
+
+- **`js/constants.js`**: extend `DECADES` to 15 entries with the new columns
+  from the baseline table (`diagMult`, `stressMult`, `treatMult`,
+  `waitDecay`, `volume`, `autoLevel`, `pressureValve`); add the 8 future
+  shop items; add novel case types (GENE-MOD REJECTION, CYBER-SEPSIS,
+  LONGEVITY OVERLOAD) to `PATHOGENS` with an `autoImmune: true` flag and,
+  for LONGEVITY OVERLOAD, a `roomSequence: [a, b]` field.
+- **sim (`js/sim.js` or equivalent)**: era-baseline fold in the same
+  `techMods()` seam as purchases; free-automation ticks per `autoLevel`
+  (auto-diag 2030s+, auto-assign 2050s+, self-treat 2075+), skipping
+  `autoImmune` patients; DRONE OUTAGE + NANOBOT REBELLION timers (one
+  shared "automation enabled" flag); hands-on x1.2 payout check (was the
+  routing click human?).
+- **era stats**: `state.eraStats[]` accumulation + ERA REPORT popup (block
+  3 computed deltas); mandatory-gate flag on the popup (ESC disabled).
+- **render**: auto-routed patients get a 3-frame trail particle; novel cases
+  a blinking red outline; per-era prop painters keyed off `DECADES` index.
+
 ## Open design questions
 
-1. **Decade pacing** — 1 shift per decade with a double 2020s (proposed) vs.
-   2 shifts per decade and a 20-shift run (bigger change, other agent owns
-   `levels.js`).
+1. **Decade pacing** — RECOMMENDED above: 14-shift campaign (double 2020s,
+   one shift per future era) + Year 3000 bonus round; endless OVERTIME MODE
+   deferred to backlog. Needs sign-off since `levels.js` (other agent)
+   defines the 10-shift run today.
 2. **Inflation scope** — payouts + hire costs only (proposed), or also
    retro-price already-owned techs for a visible "healthcare costs balloon"
    teaching beat?
@@ -479,3 +499,10 @@ Era 2; own any 2 to advance"). One coherent scheme across both docs:
    shift 2, or the right tutorial mercy?
 4. **Palette shift** — subtle tint swaps (proposed) vs. full per-decade
    palettes (more art, more charm).
+5. **Volume ceiling** — 75–100 concurrent patients (2100/Y3K) may strain the
+   canvas renderer and the 12 `WAIT_SPOTS`; may need sprite batching and a
+   deeper lobby queue, or cap on-screen count and represent overflow as a
+   counter ("+23 inbound").
+6. **Novel-case difficulty** — are 3 new pathogen types (gene-mod, cyber-
+   sepsis, longevity) worth the sprite + balance cost, or should future
+   pressure valves lean entirely on outage events + volume?
