@@ -186,7 +186,7 @@ function render() {
     G.hoverPatientId = hp ? hp.id : null;
     if (hp) {
       el.tooltip.innerHTML = hp.diagnosed
-        ? `<b>"${hp.complaint || '…'}"</b><br/>${hp.def.name} — send to <b>${ROOM_TYPES[PATHOGENS[hp.typeKey].room].name.toUpperCase()}</b>.`
+        ? `<b>"${hp.complaint || '…'}"</b><br/>${hp.def.name}.`
         : `<b>"${hp.complaint || '…'}"</b><br/>UNDIAGNOSED — the tells might give it away, or wait for triage.`;
     }
   }
@@ -197,9 +197,9 @@ function render() {
     ctx.strokeRect(hp.x - 12, hp.y - 32, 24, 36);
     ctx.globalAlpha = 1;
     const lines = wrapText(hp.complaint || '…', 26);
-    const dx = hp.diagnosed
-      ? `${hp.def.name.toUpperCase()} → ${ROOM_TYPES[PATHOGENS[hp.typeKey].room].name.toUpperCase()}`
-      : null;
+    // diagnosis shows ONLY the pathogen — the player learns the right
+    // ward from the shop's SPECIALTY labels, not a routing arrow
+    const dx = hp.diagnosed ? hp.def.name.toUpperCase() : null;
     drawSpeechBubble(hp.x, hp.y - 56, lines, dx, 1);
   }
 

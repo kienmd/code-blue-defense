@@ -53,7 +53,7 @@ canvas.addEventListener('click', evt => {
     G.selection = { kind: 'patient', obj: p };
     G.sfx('select');
     el.tooltip.innerHTML = p.diagnosed
-      ? `<b>${p.def.name}</b> — needs <b>${ROOM_TYPES[PATHOGENS[p.typeKey].room].name.toUpperCase()}</b>. ${p.def.desc}`
+      ? `<b>${p.def.name}</b>. ${p.def.desc}`
       : '<b>UNDIAGNOSED</b> — a lobby nurse (or the Lab-Router) must identify the pathogen. You can still bed them, but treatment crawls.';
     return;
   }

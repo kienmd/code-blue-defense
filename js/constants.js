@@ -95,37 +95,39 @@ const ELEV_SPEED = 150;         // px/s vertical in the shaft
  * free, later ones cost stars), lives and cash never cross except
  * the opted-in private wing.
  */
+/* Patient-facing descs deliberately do NOT name the right ward — the
+ * player learns routing from the rooms' SPECIALTY labels (user call). */
 const PATHOGENS = {
   flu: {
     name: 'Influenza', room: 'ward',
     color: '#58d858', complexity: 35, decay: 0.8, payout: 10000,
-    desc: 'Mild. Any General Ward bed clears it fast.',
+    desc: 'Mild — clears fast with basic care.',
   },
   bacteria: {
     name: 'Bacteria', room: 'pharmacy',
     color: '#a05ad8', complexity: 70, decay: 1.0, payout: 45000,
-    desc: 'Tanky. Needs Pharmacy antibiotics.',
+    desc: 'Tanky — melts under the right meds.',
   },
   virus: {
     name: 'Virus', room: 'virology',
     color: '#ff5a5a', complexity: 90, decay: 1.2, payout: 60000,
-    desc: 'Complex. Route to the Virology Lab.',
+    desc: 'Complex — wants lab-grade care.',
   },
   spore: {
     name: 'Airborne Spore', room: 'virology',
     color: '#b8d84a', complexity: 60, decay: 1.0, payout: 50000,
     contagious: true,
-    desc: 'CONTAGIOUS in the lobby — isolate in Virology fast.',
+    desc: 'CONTAGIOUS in the lobby — get it isolated, fast.',
   },
   trauma: {
     name: 'Trauma', room: 'surgery',
     color: '#ff7043', complexity: 80, decay: 2.2, payout: 180000,
-    desc: 'Deteriorates fast. Straight to Surgery.',
+    desc: 'Deteriorates fast — needs hands-on repair.',
   },
   cardiac: {
     name: 'Cardiac Event', room: 'cardiology',
     color: '#d82800', complexity: 100, decay: 3.0, payout: 250000,
-    desc: 'Fastest deterioration in the game. Cardiology, NOW.',
+    desc: 'Fastest deterioration in the game.',
   },
 };
 
