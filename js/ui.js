@@ -283,22 +283,25 @@ function showShiftReport() {
     (st.diagCount ? ` \u00b7 AVG TIME-TO-DIAGNOSIS <b>${fmtSecs(st.diagTime / st.diagCount)}</b>` : '') + '</div>' +
     `<div>STAGE TOTALS \u2014 HELPED ${G.discharged} \u00b7 TRANSFERS ${G.transfers}</div>`;
 
-  // Income/expense ledger (docs/ECONOMY.md): faucets above the line,
-  // drains below, NET in big type — the economy teaches itself.
-  const income = st.earned + st.copays;
+  // Income/expense ledger: faucets above the line, drains below, NET
+  // in big type — "how do hospitals make money" is answered right here:
+  // treatment reimbursements per cured patient + government funding.
+  const income = st.earned + st.copays + st.grant;
   const expense = st.salaries + st.upkeep + st.spent + st.apPrior;
   const net = income - expense;
   const row = (label, amt, cls, sign) =>
     amt ? `<div class="${cls}">${sign}${fmtMoney(amt)} \u2014 ${label}</div>` : '';
   el.reportLedger.innerHTML =
-    row('REIMBURSEMENTS', st.earned, 'lg-in', '+') +
+    row(`TREATMENT REIMBURSEMENTS (${st.helped} CURED)`, st.earned, 'lg-in', '+') +
     row('COPAYS', st.copays, 'lg-in', '+') +
+    row('GOVERNMENT GRANT', st.grant, 'lg-in', '+') +
     row('SALARIES', st.salaries, 'lg-out', '-') +
     row('ROOM UPKEEP', st.upkeep, 'lg-out', '-') +
     row('BUILDS / HIRES / TECH', st.spent, 'lg-out', '-') +
     row('ACCOUNTS PAYABLE (PRIOR)', st.apPrior, 'lg-out', '-') +
     `<div class="lg-net" style="color:${net >= 0 ? '#1d7a34' : '#a02020'}">NET ${net >= 0 ? '+' : ''}${fmtMoney(net)}</div>` +
-    (st.apCarried ? `<div class="lg-out">CARRIED FORWARD: ${fmtMoney(st.apCarried)} A/P</div>` : '');
+    (st.apCarried ? `<div class="lg-out">CARRIED FORWARD: ${fmtMoney(st.apCarried)} A/P</div>` : '') +
+    `<div class="lg-note">REAL HOSPITALS RUN ON REIMBURSEMENT + PUBLIC FUNDING TOO</div>`;
 
   let flavor;
   if (st.helped === 0) flavor = 'ROUGH ONE. NOBODY WALKED OUT SMILING.';
@@ -391,7 +394,8 @@ function showInspector(kind, key) {
         ? stat('EFFECT', `+${BREAKROOM_REGEN} STRESS RECOVERY/SEC (MAX ${BREAKROOM_CAP})`)
         : stat('BEDS', def.beds) + stat('STAFF SLOTS', def.staffSlots)) +
       (Object.entries(PATHOGENS).some(([, p]) => p.room === key)
-        ? stat('TREATS', Object.values(PATHOGENS).filter(p => p.room === key).map(p => p.name.toUpperCase()).join(', '))
+        ? stat('SPECIALTY', Object.values(PATHOGENS).filter(p => p.room === key).map(p => p.name.toUpperCase()).join(', ')) +
+          stat('RULE', `TREATS ALL PATIENTS \u2014 SPECIALTY AT FULL SPEED + PAY, OTHERS x${WRONG_ROOM_MULT} SPEED, x${PAYOUT_OUTCOME_MULT.wrong} PAY`)
         : '');
     status = owned ? `OWNED: ${owned}` : 'NOT BUILT YET';
   } else if (kind === 'staff') {

@@ -64,6 +64,7 @@ function freshShiftStats() {
     // ledger (docs/ECONOMY.md) — faucets above the line, drains below
     earned: 0,          // case reimbursements (outcome-scaled)
     copays: 0,
+    grant: 0,           // government grant (base + performance), lands at settle
     spent: 0,           // builds / hires / tech this wave
     salaries: 0, upkeep: 0, apPrior: 0, apCarried: 0,
   };
@@ -77,10 +78,16 @@ function chargeSoft(amount) {
   G.accountsPayable += amount - paid;
 }
 
-/* End-of-shift settle: salaries + upkeep + prior accounts payable. */
+/* End-of-shift settle: the government grant lands first (base +
+ * performance), then salaries + upkeep + prior accounts payable. */
 function settleLedger() {
   const st = G.shiftStats;
   const infl = currentEra().inflation;
+  st.grant = Math.round((GRANT_BASE +
+    st.helped * GRANT_PER_CURE +
+    (st.transfers === 0 ? GRANT_NO_LOSS : 0) +
+    (st.longestWait < 30 ? GRANT_FAST : 0)) * infl);
+  G.budget += st.grant;
   st.salaries = G.staffList.reduce((sum, s) => sum + Math.round(s.def.salary * infl), 0);
   st.upkeep = G.rooms.reduce((sum, r) => sum + Math.round(r.def.cost * UPKEEP_RATE * infl), 0);
   st.apPrior = G.accountsPayable;
@@ -218,6 +225,27 @@ function spawnPatient(type, arrival = {}) {
   }
 }
 
+/* Ambient sickness layer: the waiting room and wards SOUND unwell.
+ * One quiet cough/sneeze/moan every few seconds, more often when the
+ * hospital is fuller, never spammy. Pathogen picks the sound:
+ * respiratory cases cough/sneeze, the severe ones groan. */
+let sickAmbientT = 3;
+function updateSickAmbience(dt) {
+  sickAmbientT -= dt;
+  if (sickAmbientT > 0) return;
+  const sick = G.patients.filter(p => !p.outcome && p.state !== 'exiting' && p.state !== 'transfer');
+  // next window: fewer patients = longer silence; floor keeps it sparse
+  sickAmbientT = Math.max(2.5, 8 - sick.length) + Math.random() * 2;
+  if (!sick.length) return;
+  const p = sick[Math.floor(Math.random() * sick.length)];
+  const respiratory = p.typeKey === 'flu' || p.typeKey === 'spore' || p.typeKey === 'virus';
+  const severe = p.typeKey === 'trauma' || p.typeKey === 'cardiac';
+  const sound = respiratory ? (Math.random() < 0.35 ? 'sneeze' : 'cough')
+    : severe ? 'moan'
+    : (Math.random() < 0.5 ? 'cough' : 'moan');    // bacteria: either
+  G.sfx(sound);
+}
+
 function freeWaitSpot(p) {
   if (p.waitIndex >= 0 && G.waitSpots[p.waitIndex] === p) G.waitSpots[p.waitIndex] = null;
   p.waitIndex = -1;
@@ -340,7 +368,7 @@ function update(dt) {
         // era has period transport, the renderer dresses it).
         if (!G.ambulance && Math.random() < 0.18) {
           G.ambulance = { t: 0, type, delivered: false };
-          G.sfx('sirenblip');
+          G.sfx('sirenwail');            // proper wail, fades as it stops
         } else {
           spawnPatient(type);
         }
@@ -363,6 +391,8 @@ function update(dt) {
   // Cached once per tick: Patient.decayMult reads this per patient per
   // frame — filtering the staff list there was O(patients x staff).
   G.calmOrderlies = lobbyStaff().filter(s => s.typeKey === 'orderly' && !s.isBurnedOut(G.time)).length;
+
+  updateSickAmbience(dt);
 
   updatePatients(dt);
   updateStaff(dt);
@@ -416,6 +446,7 @@ function updatePatients(dt) {
       continue;
     }
     if (p.blurtT > 0) p.blurtT -= dt;
+    if (p.sayT > 0) p.sayT -= dt;
     if (p.state === 'arriving' || p.state === 'walking') {
       if (moveAlongPath(p, dt)) {
         if (p.state === 'arriving') {
@@ -475,6 +506,15 @@ function dischargePatient(p) {
   burstConfetti(p.x, p.y - 20);
   G.sfx('discharge');
   narrate('firstDischarge');
+  // FLAVOR: the walk-out one-liner — throttled when the ward is slammed
+  // (busy waves skip most of them), occasionally spoken aloud.
+  if (G.patients.length <= 5 || Math.random() < 0.5) {
+    p.sayLine = dischargeLine(p.typeKey);
+    p.sayT = 2.6;
+    if (Math.random() < 0.2 && typeof speakComplaint === 'function') {
+      speakComplaint(p.sayLine, p.seq || 0);
+    }
+  }
   refreshShop();
 }
 

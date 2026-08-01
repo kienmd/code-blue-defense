@@ -113,13 +113,18 @@ async function simulateAgenticDecision(patient) {
  * falls back to the canned table.
  * ============================================================ */
 
+/* Base pools: 8+ lines per pathogen so repeats are rare. Short (fits
+ * the hover bubble), first-person, human, a little unhinged. */
 const COMPLAINT_DB = {
   flu: [
     "doc, my nose is a faucet",
     "I sneezed 44 times on the bus here",
-    "everything aches and I'm freezing",
+    "everything aches. even my hair aches.",
     "my head is full of soup",
     "I brought my own tissue box. boxes.",
+    "I'm hot AND cold. pick one, body!",
+    "my sneeze scared the cat off the roof",
+    "I licked a doorknob on a dare. regrets.",
   ],
   bacteria: [
     "this cut got real angry real fast",
@@ -127,13 +132,19 @@ const COMPLAINT_DB = {
     "the scrape from tuesday is... pulsing?",
     "I ignored it for a week. big mistake.",
     "it's warm and it should NOT be warm",
+    "my 'it's fine' turned into 'it's NOT fine'",
+    "I drew a face on the swelling. it grew.",
+    "grandma's remedy made it worse. sorry grandma.",
   ],
   virus: [
     "I've got spots on my spots",
     "my fever has a fever",
-    "I googled it. don't ask what it said.",
     "it started with ONE spot. now look.",
     "I feel like a lava lamp, doc",
+    "my thermometer said 'no thanks'",
+    "I glow in the dark now. is that bad?",
+    "my mirror screamed first",
+    "day 3: the spots have formed a map of Ohio",
   ],
   spore: [
     "*cough* sorry *cough* everyone I- *cough*",
@@ -141,6 +152,9 @@ const COMPLAINT_DB = {
     "why is my cough... green?",
     "the basement mushrooms fought back",
     "please don't stand too close, doc",
+    "I smelled the weird jar. WHY did I smell it.",
+    "my lungs feel like a terrarium",
+    "the compost heap breathed at me first",
   ],
   trauma: [
     "uhhh doctor, I fell off my bike",
@@ -148,6 +162,9 @@ const COMPLAINT_DB = {
     "turns out ladders have opinions",
     "I bet I could jump the fence. I could not.",
     "my arm bends a new way now",
+    "hold-my-drink incident. don't ask.",
+    "the trampoline betrayed me",
+    "I was winning the argument with the stairs",
   ],
   cardiac: [
     "feels like an elephant sat on my chest",
@@ -155,8 +172,46 @@ const COMPLAINT_DB = {
     "just a little jaw ache, probably nothing?",
     "ran up the stairs and my chest went THUD",
     "I feel a strong urge to sit down forever",
+    "my heart is doing a drum solo",
+    "my chest tightened at the word 'taxes'",
+    "my ticker's ticking in cursive",
   ],
 };
+
+/* Era seasoning: a 19XX patient talks differently than a 2026 one.
+ * Bucketed by the stage's era; merged into the base pool at pick time. */
+const COMPLAINT_ERA = {
+  early: {   // 19XX — the century of medicine
+    flu: ["caught a chill at the drive-in picture show", "the whole factory floor is sneezing, doc"],
+    bacteria: ["the tetanus shot is new, right? asking for me", "nicked it on the plow. it's gone theatrical."],
+    virus: ["the neighbor kid had it. now the whole block does", "measles party. worst party."],
+    spore: ["been down the mine since monday", "the barn loft dust finally got me"],
+    trauma: ["fell off the milk truck", "cranked the Model T and it cranked back"],
+    cardiac: ["chest went funny at the victory parade", "doc said 'smoke for your nerves'. doc was wrong."],
+  },
+  digital: { // 2XXX — EHR / internet / smartphones
+    flu: ["WebMD says I have everything", "I sneezed on the keyboard. it's under warranty?"],
+    bacteria: ["the forum said to put butter on it", "I rated this infection 1 star on Yelp"],
+    virus: ["I caught something at the LAN party", "my smartwatch just says 'ERROR'"],
+    spore: ["the office AC has been 'getting fixed' for a year", "I vacuumed a very old beanbag chair"],
+    trauma: ["segway incident. please don't blog this", "I was texting. the pole was not."],
+    cardiac: ["my fitness tracker called 911 for me", "my heart rate app crashed. then so did I."],
+  },
+  future: {  // 2026+ — agentic AI and beyond
+    flu: ["my health agent pre-diagnosed me in the uber", "the AI said 'rest'. I did not rest."],
+    bacteria: ["the nanogel patch expired in 2024", "my chatbot says it's 'probably fine'. it lies."],
+    virus: ["I opted out of the immunity update", "caught it in VR somehow?? doc???"],
+    spore: ["the vertical farm sneezed on me", "my air purifier unionized and quit"],
+    trauma: ["the delivery drone and I wanted the same door", "my self-driving scooter had other plans"],
+    cardiac: ["my biofeedback ring is just screaming", "the stock ticker did that. THAT did this."],
+  },
+};
+
+/* Which era-seasoning bucket the current stage sits in. */
+function eraBucket() {
+  const idx = (typeof G !== 'undefined' && G.stage) ? G.stage.eraIdx : 0;
+  return idx <= 3 ? 'early' : (idx <= 5 ? 'digital' : 'future');
+}
 
 const COMPLAINT_BANNED = [
   'flu', 'influenza', 'bacteria', 'bacterial', 'virus', 'viral', 'spore',
@@ -164,8 +219,67 @@ const COMPLAINT_BANNED = [
 ];
 
 function fallbackComplaint(typeKey) {
-  const list = COMPLAINT_DB[typeKey] || ["I don't feel so good, doc"];
+  const base = COMPLAINT_DB[typeKey] || ["I don't feel so good, doc"];
+  const extra = (COMPLAINT_ERA[eraBucket()] || {})[typeKey] || [];
+  const list = base.concat(extra);
   return list[Math.floor(Math.random() * list.length)];
+}
+
+/* ============================================================
+ * DISCHARGE LINES — the walk-out one-liner when a patient is
+ * cured. Same shape as complaints: per-pathogen pools (often
+ * calling back to what they came in with) + a generic pool.
+ * ============================================================ */
+const DISCHARGE_DB = {
+  flu: [
+    "I can BREATHE through my NOSE",
+    "first full sentence without sneezing. bliss.",
+    "the soup has left my head",
+    "smell? I remember smell now!",
+  ],
+  bacteria: [
+    "it's the right color again!",
+    "the pulsing stopped. we're friends now.",
+    "next time I'm coming in on day ONE",
+    "arm: back to factory settings",
+  ],
+  virus: [
+    "spot-free and feeling fabulous",
+    "my fever finally checked out",
+    "I no longer glow. mostly.",
+    "the mirror and I made up",
+  ],
+  spore: [
+    "my cough is GONE!",
+    "breathing plain old air. delicious.",
+    "the greenhouse and I are done. forever.",
+    "you may stand near me again",
+  ],
+  trauma: [
+    "everything bends the CORRECT way now",
+    "the skateboard and I have made peace",
+    "good as new! ...selling the trampoline though",
+    "walked in broken, walking out smug",
+  ],
+  cardiac: [
+    "my heart's back on the beat!",
+    "the elephant got off my chest",
+    "climbed the stairs on the way out. showing off.",
+    "ticker's ticking in print again, thanks doc",
+  ],
+};
+
+const DISCHARGE_GENERIC = [
+  "best sleep I've had in years, thanks doc!",
+  "10 out of 10, would heal here again",
+  "I feel like a NEW pixel person",
+  "tell the nurse they're a legend",
+  "invoice me, I don't even care!",
+];
+
+function dischargeLine(typeKey) {
+  const pool = (DISCHARGE_DB[typeKey] || []).concat(DISCHARGE_GENERIC);
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 function sanitizeComplaint(text, typeKey) {
@@ -195,8 +309,10 @@ async function generateComplaint(patient) {
           system:
             'You write one-line first-person presenting complaints for patients in a cute 8-bit ' +
             'hospital game. Reply with ONLY the complaint line: max 60 characters, first person, ' +
-            'funny but kind, and NEVER name the condition or use medical terminology for it.',
-          messages: [{ role: 'user', content: `condition: ${patient.def.name}\nsymptoms: ${db.symptoms.join(', ')}` }],
+            'punchy and funny with a specific human detail (how it happened, a small regret, a ' +
+            'weird observation), flavored to the era given, kind in spirit, and NEVER name the ' +
+            'condition or use medical terminology for it.',
+          messages: [{ role: 'user', content: `condition: ${patient.def.name}\nsymptoms: ${db.symptoms.join(', ')}\nera: ${eraBucket() === 'early' ? 'mid 20th century' : eraBucket() === 'digital' ? 'early internet / smartphone age' : 'near-future AI age'}` }],
         }),
       });
       if (res.ok) {

@@ -51,8 +51,9 @@ function render() {
   ctx.fillRect(-400, GROUND_Y, WORLD_W + 800, 400);
   ctx.fillStyle = '#242e48';
   ctx.fillRect(-400, GROUND_Y, WORLD_W + 800, 3);
-  drawStreetProp(bd);
-  if (G.ambulance) drawAmbulance(bd);
+  // (No parked vehicle prop — ambulances only appear as the arrival
+  // flavor event, driving in and out.)
+  if (G.ambulance) drawAmbulance();
 
   // Building shell — the exterior AGES with the era (brick -> concrete
   // -> glass -> holo), driven by ERAS[*].shell / roofStyle.
@@ -69,7 +70,7 @@ function render() {
   ctx.fillStyle = era.roofStyle === 'glass' || era.roofStyle === 'helipad' || era.roofStyle === 'holo'
     ? PALETTE.blue : PALETTE.white;
   ctx.textAlign = 'left';
-  ctx.fillText(`CODE BLUE GENERAL \u00b7 ${era.sign}`, 420, bTop - 20);
+  ctx.fillText(`CODE BLUE GENERAL \u00b7 ${G.stage ? G.stage.year : era.sign}`, 420, bTop - 20);
 
   // Floors — only the ones in use, plus the next buildable floor as a
   // dimmed "expansion" hint. The hospital visibly grows as you build.
@@ -172,6 +173,10 @@ function render() {
     if (p.blurtT > 0 && p.complaint && p.state === 'waiting') {
       const short = p.complaint.length > 20 ? p.complaint.slice(0, 19) + '…' : p.complaint;
       drawSpeechBubble(p.x, p.y - 52, [short], null, Math.min(1, p.blurtT));
+    }
+    // Discharge one-liner: the cured walk-out gets the last word
+    if (p.sayT > 0 && p.sayLine) {
+      drawSpeechBubble(p.x, p.y - 52, wrapText(p.sayLine, 24), null, Math.min(1, p.sayT));
     }
   }
 
@@ -325,102 +330,94 @@ function drawCrosser(bd, worldTop) {
 }
 
 /* FLAVOR EVENT: an ambulance pulls up, delivers a patient, drives off.
- * Era-dressed: rounded wagon in the early days, boxy lightbar rig in
- * the modern eras, hover rig in the far future (keyed off bd.street). */
-function drawAmbulance(bd) {
+ * Era-correct and readable at a glance — every variant has wheels (or
+ * thrusters), a windshield, a beacon/lightbar, and a big red cross:
+ *   19XX        -> Cadillac-style ambulance: long low body, chrome
+ *                  trim, single rotating roof beacon
+ *   digital age -> boxy paramedic rig with a red/blue lightbar
+ *   far future  -> hover ambulance, glowing beacon, no wheels
+ */
+function drawAmbulance() {
   const a = G.ambulance;
-  const y = GROUND_Y + 6;
-  // motion: drive in (0..1.5s), hold with doors open, reverse out (2.6s+)
+  const y = GROUND_Y + 4;
+  // motion: drive in (0..1.5s), hold while unloading, drive off (2.6s+)
   // stops just left of the ER door (view fits world x >= -100)
-  const stopX = -42;
+  const stopX = -46;
   let x;
   if (a.t < 1.5) x = -420 + (a.t / 1.5) * (stopX + 420);
   else if (a.t < 2.6) x = stopX;
   else x = stopX - (a.t - 2.6) * 220;
 
-  const hover = (bd.street === 'hover');
-  const bob = hover ? Math.sin(G.time * 3) * 2 : 0;
-  ctx.save();
-  ctx.translate(x, y + bob);
-  if (hover) {
-    ctx.fillStyle = '#c8d0e8';
-    ctx.fillRect(0, -8, 62, 14);
-    ctx.fillStyle = 'rgba(120,220,255,0.5)';
-    ctx.fillRect(6, 7, 10, 4); ctx.fillRect(46, 7, 10, 4);   // thrusters
-  } else if (bd.street === 'oldcar') {
-    // rounded mid-century wagon
-    ctx.fillStyle = '#e8e8e0';
-    ctx.fillRect(0, -4, 64, 16);
-    ctx.fillRect(10, -14, 38, 10);
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(8, 10, 10, 8); ctx.fillRect(44, 10, 10, 8);
-  } else {
-    // boxy paramedic rig
-    ctx.fillStyle = PALETTE.white;
-    ctx.fillRect(0, -14, 46, 26);
-    ctx.fillStyle = PALETTE.red;
-    ctx.fillRect(0, -3, 46, 4);                              // belt stripe
-    ctx.fillStyle = '#e8e8e0';
-    ctx.fillRect(46, -8, 16, 20);                            // cab
-    ctx.fillStyle = '#8ad8f0';
-    ctx.fillRect(49, -6, 9, 7);                              // windshield
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(6, 10, 9, 8); ctx.fillRect(48, 10, 9, 8);
-  }
-  // red cross + flashing lights on every variant
-  ctx.fillStyle = PALETTE.red;
-  ctx.fillRect(20, hover ? -6 : -12, 10, 10);
-  ctx.fillStyle = PALETTE.white;
-  ctx.fillRect(24, hover ? -4 : -10, 2, 6); ctx.fillRect(21, hover ? -2 : -8, 8, 2);
+  const eraIdx = G.stage ? G.stage.eraIdx : 0;
   const flash = Math.floor(G.time * 6) % 2 === 0;
-  ctx.fillStyle = flash ? PALETTE.red : '#4aa3df';
-  ctx.fillRect(hover ? 26 : 14, hover ? -12 : -18, 6, 3);
-  ctx.fillStyle = flash ? '#4aa3df' : PALETTE.red;
-  ctx.fillRect(hover ? 34 : 24, hover ? -12 : -18, 6, 3);
-  ctx.restore();
-}
+  ctx.save();
 
-/* Parked street prop by the entrance: era car -> EV -> hover gurney. */
-function drawStreetProp(bd) {
-  const kind = bd.street || 'oldcar';
-  const x = -110, y = GROUND_Y + 8;
-  if (kind === 'oldcar') {
-    // rounded 1950s ambulance-wagon
-    ctx.fillStyle = '#d8d8d0';
-    ctx.fillRect(x, y, 64, 16);
-    ctx.fillRect(x + 10, y - 10, 36, 10);
-    ctx.fillStyle = PALETTE.red;
-    ctx.fillRect(x + 24, y + 2, 10, 10);
-    ctx.fillStyle = PALETTE.white;
-    ctx.fillRect(x + 28, y + 3, 2, 8); ctx.fillRect(x + 25, y + 6, 8, 2);
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(x + 8, y + 12, 10, 8); ctx.fillRect(x + 44, y + 12, 10, 8);
-  } else if (kind === 'sedan') {
-    ctx.fillStyle = '#7a2a2a';
-    ctx.fillRect(x, y + 2, 66, 12);
-    ctx.fillRect(x + 14, y - 6, 34, 8);
-    ctx.fillStyle = '#aad0e8';
-    ctx.fillRect(x + 18, y - 4, 12, 6); ctx.fillRect(x + 34, y - 4, 10, 6);
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(x + 8, y + 12, 10, 8); ctx.fillRect(x + 46, y + 12, 10, 8);
-  } else if (kind === 'ev') {
-    ctx.fillStyle = '#e8e8ec';
-    ctx.fillRect(x, y + 2, 62, 12);
-    ctx.fillStyle = '#28303c';
-    ctx.fillRect(x + 10, y - 5, 42, 8);
-    ctx.fillStyle = '#40e05a';
-    ctx.fillRect(x + 54, y + 6, 6, 3);            // charge light
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(x + 8, y + 12, 10, 8); ctx.fillRect(x + 42, y + 12, 10, 8);
-  } else if (kind === 'hover') {
+  if (eraIdx >= 7) {
+    // hover ambulance
     const bob = Math.sin(G.time * 3) * 2;
-    ctx.fillStyle = '#8a9ae0';
-    ctx.fillRect(x, y - 4 + bob, 58, 10);
-    ctx.fillStyle = '#c8f0f8';
-    ctx.fillRect(x + 8, y - 10 + bob, 20, 6);
-    ctx.fillStyle = 'rgba(120,220,255,0.5)';
-    ctx.fillRect(x + 6, y + 7 + bob, 8, 4); ctx.fillRect(x + 42, y + 7 + bob, 8, 4);
+    ctx.translate(x, y + bob - 6);
+    ctx.fillStyle = '#dfe4f2';
+    ctx.fillRect(0, -8, 66, 15);                            // hull
+    ctx.fillStyle = '#8ad8f0';
+    ctx.fillRect(50, -6, 12, 7);                            // canopy
+    ctx.fillStyle = PALETTE.red;
+    ctx.fillRect(18, -6, 12, 11);                           // cross plate
+    ctx.fillStyle = PALETTE.white;
+    ctx.fillRect(23, -4, 2, 7); ctx.fillRect(20, -2, 8, 3);
+    ctx.fillStyle = flash ? '#66e0ff' : '#c858e8';
+    ctx.fillRect(28, -12, 8, 3);                            // glow beacon
+    ctx.fillStyle = 'rgba(120,220,255,0.55)';
+    ctx.fillRect(8, 8, 10, 4); ctx.fillRect(48, 8, 10, 4);  // thrusters
+  } else if (eraIdx >= 4) {
+    // boxy paramedic rig with lightbar
+    ctx.translate(x, y);
+    ctx.fillStyle = PALETTE.white;
+    ctx.fillRect(0, -18, 48, 28);                           // box body
+    ctx.fillStyle = PALETTE.red;
+    ctx.fillRect(0, -6, 48, 5);                             // belt stripe
+    ctx.fillStyle = '#e8e8e0';
+    ctx.fillRect(48, -12, 18, 22);                          // cab
+    ctx.fillStyle = '#8ad8f0';
+    ctx.fillRect(51, -10, 11, 8);                           // windshield
+    ctx.fillStyle = PALETTE.red;
+    ctx.fillRect(14, -15, 12, 12);                          // big cross
+    ctx.fillStyle = PALETTE.white;
+    ctx.fillRect(19, -13, 2, 8); ctx.fillRect(16, -11, 8, 3);
+    ctx.fillStyle = flash ? PALETTE.red : '#3a1010';        // lightbar
+    ctx.fillRect(8, -23, 10, 4);
+    ctx.fillStyle = flash ? '#102a4a' : '#4aa3df';
+    ctx.fillRect(20, -23, 10, 4);
+    ctx.fillStyle = '#1a1a1a';                              // wheels
+    ctx.fillRect(7, 8, 11, 9); ctx.fillRect(50, 8, 11, 9);
+    ctx.fillStyle = '#66788e';
+    ctx.fillRect(10, 11, 5, 4); ctx.fillRect(53, 11, 5, 4); // hubs
+  } else {
+    // 19XX: Cadillac-style ambulance — long, low, chrome, one beacon
+    ctx.translate(x, y);
+    ctx.fillStyle = '#f0f0e8';
+    ctx.fillRect(0, -8, 78, 16);                            // long low body
+    ctx.fillRect(14, -16, 44, 9);                           // rounded roofline
+    ctx.fillStyle = '#e0e0d4';
+    ctx.fillRect(2, -6, 10, 12);                            // sculpted nose
+    ctx.fillStyle = '#8ad8f0';
+    ctx.fillRect(48, -14, 9, 6);                            // windshield
+    ctx.fillRect(18, -14, 26, 6);                           // side glass
+    ctx.fillStyle = '#c8c8c8';
+    ctx.fillRect(0, 2, 78, 2);                              // chrome trim line
+    ctx.fillStyle = PALETTE.red;
+    ctx.fillRect(24, -6, 12, 12);                           // big cross
+    ctx.fillStyle = PALETTE.white;
+    ctx.fillRect(29, -4, 2, 8); ctx.fillRect(26, -2, 8, 3);
+    ctx.fillStyle = flash ? PALETTE.red : '#5a1010';
+    ctx.fillRect(32, -21, 7, 5);                            // single roof beacon
+    ctx.fillStyle = '#8a2020';
+    ctx.fillRect(33, -16, 5, 2);                            // beacon base
+    ctx.fillStyle = '#1a1a1a';                              // wheels
+    ctx.fillRect(10, 6, 12, 9); ctx.fillRect(56, 6, 12, 9);
+    ctx.fillStyle = PALETTE.white;
+    ctx.fillRect(13, 9, 6, 4); ctx.fillRect(59, 9, 6, 4);   // whitewalls
   }
+  ctx.restore();
 }
 
 /* Roofline: parapet + era props. Every era keeps the red cross (it's

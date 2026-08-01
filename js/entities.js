@@ -66,6 +66,8 @@ class Patient {
     this.aiTag = null;              // set by the Agentic Lab-Router
     this.complaint = null;          // first-person flavor (js/agentic.js)
     this.blurtT = 0;                // auto-blurt bubble timer on sit-down
+    this.sayT = 0;                  // discharge one-liner bubble timer
+    this.sayLine = null;
     this.bob = Math.random() * Math.PI * 2;
     this.sporeTimer = SPORE_PULSE;
     const pick = arr => arr[Math.floor(Math.random() * arr.length)];

@@ -98,33 +98,33 @@ const ELEV_SPEED = 150;         // px/s vertical in the shaft
 const PATHOGENS = {
   flu: {
     name: 'Influenza', room: 'ward',
-    color: '#58d858', complexity: 35, decay: 0.8, payout: 4000,
+    color: '#58d858', complexity: 35, decay: 0.8, payout: 10000,
     desc: 'Mild. Any General Ward bed clears it fast.',
   },
   bacteria: {
     name: 'Bacteria', room: 'pharmacy',
-    color: '#a05ad8', complexity: 70, decay: 1.0, payout: 18000,
+    color: '#a05ad8', complexity: 70, decay: 1.0, payout: 45000,
     desc: 'Tanky. Needs Pharmacy antibiotics.',
   },
   virus: {
     name: 'Virus', room: 'virology',
-    color: '#ff5a5a', complexity: 90, decay: 1.2, payout: 25000,
+    color: '#ff5a5a', complexity: 90, decay: 1.2, payout: 60000,
     desc: 'Complex. Route to the Virology Lab.',
   },
   spore: {
     name: 'Airborne Spore', room: 'virology',
-    color: '#b8d84a', complexity: 60, decay: 1.0, payout: 22000,
+    color: '#b8d84a', complexity: 60, decay: 1.0, payout: 50000,
     contagious: true,
     desc: 'CONTAGIOUS in the lobby — isolate in Virology fast.',
   },
   trauma: {
     name: 'Trauma', room: 'surgery',
-    color: '#ff7043', complexity: 80, decay: 2.2, payout: 95000,
+    color: '#ff7043', complexity: 80, decay: 2.2, payout: 180000,
     desc: 'Deteriorates fast. Straight to Surgery.',
   },
   cardiac: {
     name: 'Cardiac Event', room: 'cardiology',
-    color: '#d82800', complexity: 100, decay: 3.0, payout: 130000,
+    color: '#d82800', complexity: 100, decay: 3.0, payout: 250000,
     desc: 'Fastest deterioration in the game. Cardiology, NOW.',
   },
 };
@@ -165,33 +165,41 @@ const UNDIAGNOSED_MULT = 0.35;
 
 /* ---------- Rooms (built into floor slots) ---------- */
 const ROOM_TYPES = {
+  /* Every treatment room treats ANY patient — "specialty" means the
+   * cases it handles at full speed and full pay; off-specialty cases
+   * heal at WRONG_ROOM_MULT speed for the 'wrong' payout tier. */
+  /* Costs retuned (v4, deviates from docs/ECONOMY.md): the doc's
+   * room prices outran the faucets — a decent wave 1 couldn't buy the
+   * pharmacy that wave 2's banner demands. Rooms trimmed ~20%, payouts
+   * up ~2.5x, plus the per-wave GOVERNMENT GRANT below, so a decent
+   * round always affords one meaningful purchase. */
   ward: {
-    name: 'General Ward', cost: 250000, color: '#3fae8f',
+    name: 'General Ward', cost: 200000, color: '#3fae8f',
     beds: 2, staffSlots: 2,
-    desc: 'Treats INFLUENZA. The cheap workhorse room.',
+    desc: 'Specialty: INFLUENZA. The cheap workhorse room — treats anyone in a pinch.',
   },
   pharmacy: {
-    name: 'Pharmacy', cost: 350000, color: '#a05ad8',
+    name: 'Pharmacy', cost: 280000, color: '#a05ad8',
     beds: 2, staffSlots: 2,
-    desc: 'Treats BACTERIA with antibiotics.',
+    desc: 'Specialty: BACTERIA (antibiotics on tap). Treats anyone in a pinch.',
   },
   virology: {
-    name: 'Virology Lab', cost: 500000, color: '#b8d84a',
+    name: 'Virology Lab', cost: 420000, color: '#b8d84a',
     beds: 2, staffSlots: 2,
-    desc: 'Treats VIRUS + isolates AIRBORNE SPORE.',
+    desc: 'Specialty: VIRUS + AIRBORNE SPORE (isolation). Treats anyone in a pinch.',
   },
   surgery: {
-    name: 'Surgery', cost: 700000, color: '#ff7043',
+    name: 'Surgery', cost: 600000, color: '#ff7043',
     beds: 2, staffSlots: 2,
-    desc: 'Treats TRAUMA cases.',
+    desc: 'Specialty: TRAUMA. Treats anyone in a pinch.',
   },
   cardiology: {
-    name: 'Cardiology', cost: 900000, color: '#ff5a5a',
+    name: 'Cardiology', cost: 750000, color: '#ff5a5a',
     beds: 2, staffSlots: 2,
-    desc: 'Treats CARDIAC EVENTS.',
+    desc: 'Specialty: CARDIAC EVENTS. Treats anyone in a pinch.',
   },
   breakroom: {
-    name: 'Break Room', cost: 150000, color: '#4aa3df',
+    name: 'Break Room', cost: 120000, color: '#4aa3df',
     beds: 0, staffSlots: 0, support: true,
     desc: 'All staff recover +3 stress/sec per Break Room (max 2 count).',
   },
@@ -255,7 +263,17 @@ const ORDERLY_LOBBY_CAP = 2;
 const PAYOUT_OUTCOME_MULT = { right: 1.0, wrong: 0.8, undiagnosed: 0.7 }; // "no chart, no charge"
 const COPAY = 300;                    // per arrival — the income floor faucet
 const UPKEEP_RATE = 0.02;             // per shift, x room base build cost
-const BUILD_ESCALATION = 1.5;         // Nth copy of a room type: cost x1.5^(N-1). Break Room exempt (support).
+const BUILD_ESCALATION = 1.35;        // Nth copy of a room type: cost x1.35^(N-1). Break Room exempt (support).
+                                      // (was 1.5 — softened so a second ward/pharmacy stays reachable)
+
+/* GOVERNMENT GRANT (per wave, guaranteed): hospitals really do run on
+ * public funding + reimbursement — this is the faucet that keeps every
+ * round's shopping list reachable. Base + performance bonuses, all
+ * x era inflation, itemized on the wave report. */
+const GRANT_BASE     = 120000;        // every wave, no questions asked
+const GRANT_PER_CURE = 10000;         // performance: per patient helped this wave
+const GRANT_NO_LOSS  = 30000;         // performance: zero ICU transfers this wave
+const GRANT_FAST     = 15000;         // performance: longest wait under 30s
 // NOTE: ECONOMY.md's private-wing risk lever AND the era-up modernization
 // grant were CUT in implementation (user calls: wing removed outright; the
 // grant died with the per-stage pivot — each stage now sets its own budget).

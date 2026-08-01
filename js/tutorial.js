@@ -39,55 +39,39 @@ function domRect(el2) {
   return { x: r.left, y: r.top, w: r.width, h: r.height };
 }
 
-/* Step table (data-driven). target() returns a viewport rect or null
- * (null = no spotlight, center card). done() advances action steps. */
+/* Step table (data-driven, SHORT — one sentence per step, two max).
+ * target() returns a viewport rect or null (null = no spotlight,
+ * center card). done() advances action steps; there is NO timed
+ * auto-dismissal anywhere — every step waits for the player. */
 const TUTORIAL_STEPS = [
   {
-    text: 'THIS IS YOUR HOSPITAL.<br/>PATIENTS ARRIVE AT THE LOBBY DOOR (LEFT). YOUR JOB: NOBODY LEAVES ON A STRETCHER.',
-    narr: 'Welcome to your hospital. Try not to lose anyone.',
-    target: () => worldRect(24, floorTopY(0) - 20, 856, 100),
-    manual: true,
+    text: 'BUILD A GENERAL WARD, THEN HIRE A NURSE.',
+    narr: 'First: a ward, and a nurse to run it.',
+    target: () => G.rooms.some(r => r.typeKey === 'ward')
+      ? domRect(shopButtons.staff.nurse)
+      : domRect(shopButtons.rooms.ward),
+    done: () => G.rooms.some(r => r.typeKey === 'ward') && G.staffList.some(s => s.typeKey === 'nurse'),
   },
   {
-    text: 'BUILD A GENERAL WARD.<br/>CLICK THE CARD — IT LANDS IN THE NEXT OPEN SLOT AUTOMATICALLY.',
-    narr: 'First, a ward. Click the card and the builders do the rest.',
-    target: () => domRect(shopButtons.rooms.ward),
-    done: () => G.rooms.some(r => r.typeKey === 'ward'),
-  },
-  {
-    text: 'NOW HIRE A NURSE.',
-    narr: 'A hospital is its people. Hire a nurse.',
-    target: () => domRect(shopButtons.staff.nurse),
-    done: () => G.staffList.some(s => s.typeKey === 'nurse'),
-  },
-  {
-    text: 'POST THEM TO THE LOBBY: CLICK THE WAITING-ROOM AREA.<br/>LOBBY STAFF ASSESS WALK-INS SO YOU KNOW WHAT AILS THEM.',
+    text: 'CLICK THE NURSE, THEN THE WAITING ROOM — THEY\'LL DIAGNOSE ARRIVALS.',
     narr: 'Post them to the lobby. Triage is everything.',
-    target: () => worldRect(60, floorTopY(0) - 10, 780, 90),
+    target: () => {
+      const nurse = G.staffList.find(s => s.typeKey === 'nurse');
+      if (nurse && !G.selection) return worldRect(nurse.x - 18, nurse.y - 44, 36, 54);
+      return worldRect(60, floorTopY(0) - 10, 780, 90);
+    },
     done: () => lobbyStaff().length > 0,
   },
   {
-    text: 'READY? START THE WAVE.<br/>NO ONE ARRIVES UNTIL YOU DO — BUILD AT YOUR OWN PACE.',
-    narr: 'When ready, start the wave. They will come.',
+    text: 'PRESS START WAVE 1.',
+    narr: 'When ready, start the wave.',
     target: () => domRect(el.btnShift),
     done: () => G.phase === 'shift',
   },
   {
-    text: 'A PATIENT! HOVER THEM TO HEAR THE PRESENTING COMPLAINT.<br/>THE TIMER OVER THEIR HEAD IS THEIR WAIT — DON\'T LET IT RUN RED.',
-    narr: 'Hover a patient and they will tell you what hurts.',
-    target: () => {
-      const p = waitingPatients()[0];
-      return p ? worldRect(p.x - 20, p.y - 50, 40, 60) : worldRect(60, floorTopY(0) - 10, 300, 90);
-    },
-    done: () => G.patients.some(p => p.diagnosed),
-    waitFor: () => G.patients.length > 0,
-  },
-  {
-    // CORE MANUAL ACTION 1 — patient -> room allocation. Gated on the
-    // player actually bedding a patient (auto-assign is suppressed
-    // while the tutorial runs, so this cannot happen by itself).
-    text: 'DIAGNOSED! NOW CLICK THE PATIENT, THEN CLICK THE WARD.<br/>THE PATIENT GETS A BED — RIGHT ROOM = FULL SPEED + FULL PAY.',
-    narr: 'Diagnosed. Click the patient, then the ward. A bed awaits.',
+    // card stays hidden (waitFor) until a patient is diagnosed
+    text: 'CLICK THE PATIENT, THEN CLICK THE WARD.',
+    narr: 'Diagnosed. Click the patient, then the ward.',
     target: () => {
       const p = waitingPatients().find(q => q.diagnosed) || waitingPatients()[0];
       if (p && !G.selection) return worldRect(p.x - 20, p.y - 50, 40, 60);
@@ -95,20 +79,13 @@ const TUTORIAL_STEPS = [
       return room ? worldRect(room.x, room.y, room.w, room.h) : null;
     },
     done: () => G.patients.some(p => p.room),
+    waitFor: () => G.patients.some(p => p.diagnosed),
   },
   {
-    // CORE MANUAL ACTION 2a — staff the bedside: hire a second nurse.
-    text: 'IN BED — BUT NOBODY IS TREATING THEM YET.<br/>HIRE ANOTHER NURSE FOR THE WARD.',
-    narr: 'A bed without a nurse is just furniture. Hire another.',
-    target: () => domRect(shopButtons.staff.nurse),
-    done: () => G.staffList.filter(s => s.typeKey === 'nurse').length >= 2,
-  },
-  {
-    // CORE MANUAL ACTION 2b — nurse -> room allocation. Gated on the
-    // patient's room actually having staff so treatment truly starts.
-    text: 'NOW CLICK THE NEW NURSE, THEN CLICK THE WARD WITH YOUR PATIENT.<br/>TREATMENT STARTS WHEN STAFF ARE AT THE BEDSIDE.',
-    narr: 'Click the nurse, then the ward. Medicine needs hands.',
+    text: 'HIRE A SECOND NURSE. CLICK THEM, THEN THE WARD — TREATMENT NEEDS STAFF.',
+    narr: 'A bed without a nurse is just furniture. Hire another and post them to the ward.',
     target: () => {
+      if (G.staffList.filter(s => s.typeKey === 'nurse').length < 2) return domRect(shopButtons.staff.nurse);
       const nurse = G.staffList.find(s => s.typeKey === 'nurse' && !(s.room instanceof Room) && s.room !== 'lobby');
       if (nurse && !G.selection) return worldRect(nurse.x - 18, nurse.y - 44, 36, 54);
       const room = G.rooms.find(r => r.beds && r.beds.some(Boolean));
@@ -117,19 +94,12 @@ const TUTORIAL_STEPS = [
     done: () => G.rooms.some(r => r.beds && r.beds.some(Boolean) && r.staff.length > 0),
   },
   {
-    text: 'TREATMENT UNDERWAY — THE BLUE BAR IS THE SICKNESS DRAINING. WHEN IT EMPTIES, THEY WALK OUT SMILING (AND THE HOSPITAL GETS PAID).',
-    narr: 'Now medicine does its work. Watch the sickness bar fall.',
-    target: () => {
-      const p = G.patients.find(q => q.room);
-      return p ? worldRect(p.x - 24, p.y - 50, 48, 64) : null;
-    },
-    done: () => G.discharged > 0,
-  },
-  {
-    text: 'CURED! YOUR FIRST DISCHARGE — THE HOSPITAL GETS PAID.<br/>CLEAR EVERY WAVE TO FINISH THE STAGE. EACH ERA CARD ON THE MENU IS A NEW DECADE: NEW TECH, NEW DISEASES, NEW HOSPITAL. GOOD LUCK OUT THERE.',
-    narr: 'Cured, and walking out smiling. The decades ahead bring wonders. Carry on.',
+    // card stays hidden until the cure actually lands
+    text: 'FIRST CURE! THAT\'S THE LOOP — DIAGNOSE, ALLOCATE, GET PAID.',
+    narr: 'Cured, and walking out smiling. The ward is yours.',
     target: () => null,
     manual: true,
+    waitFor: () => G.discharged > 0,
   },
 ];
 

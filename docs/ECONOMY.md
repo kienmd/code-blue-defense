@@ -1,7 +1,18 @@
 # Economy Rethink — faucets, drains, and strategy lanes
 
-Status: DESIGN PROPOSAL (not implemented). Companion to `docs/TECH_TREE.md`
-and `docs/ERAS.md`. Research snapshot: July 2026.
+Status: DESIGN PROPOSAL (largely implemented, with deviations). Companion to
+`docs/TECH_TREE.md` and `docs/ERAS.md`. Research snapshot: July 2026.
+
+> **Implementation deviations (v4 rebalance, era-stage campaign):** playtests
+> showed the doc's numbers let drains outrun faucets — a decent wave 1
+> couldn't afford the pharmacy that wave 2 demands. As shipped in
+> `js/constants.js`: room base costs trimmed ~15-20% (ward $200K, cardiology
+> $750K), reimbursements raised ~2.5x (flu $10K → cardiac $250K), build
+> escalation softened 1.5 → 1.35, and a new guaranteed per-wave
+> **GOVERNMENT GRANT** faucet was added ($120K base + performance bonuses
+> for cures / zero transfers / short waits, all x inflation) — itemized on
+> the wave report. The private-wing lever and era-up grants from Part 3
+> were cut earlier with the stage pivot.
 
 Scope: make the money system demand real resourcing strategy without being
 unfair. Numbers are quoted in the realistic-dollar scale the implementation

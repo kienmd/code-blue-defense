@@ -194,6 +194,7 @@ canvas#game {
 #report-ledger .lg-in { color: #1d7a34; }
 #report-ledger .lg-out { color: #a02020; }
 #report-ledger .lg-net { font-size: 11px; }
+#report-ledger .lg-note { color: #8a7e5c; font-size: 7px; font-style: italic; }
 /* red rubber stamp */
 #report-stamp {
   position: absolute;

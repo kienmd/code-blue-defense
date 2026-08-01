@@ -57,6 +57,52 @@ function tone(freq, dur, type = 'square', vol = 0.035, when = 0) {
   toneAt(freq, dur, type, vol, audioCtx.currentTime + when);
 }
 
+/* ---------- Noise (coughs / sneezes / paper / sirens need it) ----------
+ * A shared 1s white-noise buffer, shaped per use by a bandpass filter
+ * and a gain envelope. Chiptune-appropriate: crunchy, not realistic. */
+let noiseBuf = null;
+function noiseBurst(dur, freq, vol, when = 0, q = 1.2) {
+  if (!audioCtx) return;
+  if (!noiseBuf) {
+    noiseBuf = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  const t0 = audioCtx.currentTime + when;
+  const src = audioCtx.createBufferSource();
+  src.buffer = noiseBuf;
+  src.loop = true;
+  const bp = audioCtx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.frequency.value = freq; bp.Q.value = q;
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(vol, t0);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  src.connect(bp).connect(g).connect(masterGain || audioCtx.destination);
+  src.start(t0); src.stop(t0 + dur + 0.02);
+}
+
+/* Proper wailing two-tone siren for the ambulance arrival: pitch
+ * glides up and down while the whole thing fades as the rig stops. */
+function playSirenWail(dur = 2.4) {
+  if (!audioCtx || muted) return;
+  const t0 = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  osc.type = 'square';
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.001, t0);
+  g.gain.linearRampToValueAtTime(0.035, t0 + 0.15);        // swell in
+  g.gain.setValueAtTime(0.035, t0 + dur * 0.55);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);   // fade as it stops
+  const cycle = 0.6;                                        // rise-fall period
+  osc.frequency.setValueAtTime(620, t0);
+  for (let t = 0; t < dur; t += cycle) {
+    osc.frequency.linearRampToValueAtTime(940, t0 + t + cycle / 2);
+    osc.frequency.linearRampToValueAtTime(620, t0 + t + cycle);
+  }
+  osc.connect(g).connect(masterGain || audioCtx.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.05);
+}
+
 /* ---------- SFX ---------- */
 const SFX = {
   discharge: () => { tone(660, 0.08); tone(880, 0.1, 'square', 0.035, 0.08); tone(1180, 0.14, 'square', 0.03, 0.18); },
@@ -66,7 +112,12 @@ const SFX = {
   burnout:   () => tone(110, 0.5, 'sawtooth', 0.05),
   siren:     () => { tone(680, 0.22, 'square', 0.045); tone(510, 0.22, 'square', 0.045, 0.24); tone(680, 0.22, 'square', 0.045, 0.48); },
   sirenblip: () => { tone(720, 0.1, 'square', 0.035); tone(540, 0.1, 'square', 0.035, 0.11); },
+  sirenwail: () => playSirenWail(2.4),
   scream:    () => { tone(1240, 0.1, 'sawtooth', 0.035); tone(960, 0.09, 'sawtooth', 0.035, 0.09); tone(1180, 0.13, 'sawtooth', 0.03, 0.17); },
+  // Ambient sickness layer — quieter than the SFX mix, atmospheric.
+  cough:     () => { noiseBurst(0.09, 700, 0.05); noiseBurst(0.12, 550, 0.04, 0.13); },
+  sneeze:    () => { noiseBurst(0.05, 1800, 0.03); tone(980, 0.05, 'triangle', 0.02, 0.04); noiseBurst(0.18, 500, 0.05, 0.09); },
+  moan:      () => { const f = 150 + Math.random() * 40; tone(f, 0.5, 'sawtooth', 0.014); tone(f * 0.82, 0.4, 'sawtooth', 0.011, 0.22); },
   beep:      () => tone(880, 0.05, 'sine', 0.03),
   diagnose:  () => { tone(740, 0.05, 'sine', 0.03); tone(990, 0.07, 'sine', 0.03, 0.05); },
   denied:    () => tone(160, 0.12, 'square', 0.04),
