@@ -1,50 +1,48 @@
 /* ============================================================
- * Main — boot + requestAnimationFrame loop. Wires the menu
- * buttons and exposes the debug hook. Must load last.
+ * Main — boot + requestAnimationFrame loop. Wires the era
+ * select, stage intro, report paper, and tutorial. Loads last.
  * ============================================================ */
 
-/* Pre-game the topbar stats + shop are hidden (clean title screen);
- * the hospital reveals after START. */
+/* Pre-game the topbar stats + shop are hidden (clean title screen +
+ * era select); the hospital reveals once a stage starts. */
 function setPregame(on) { document.body.classList.toggle('pregame', on); }
 setPregame(true);
 
-el.btnStart.addEventListener('click', () => { ensureAudio(); G.sfx('buy'); stopMusic(); setPregame(false); startRun(); });
-el.btnRetry.addEventListener('click', () => { ensureAudio(); stopMusic(); setPregame(false); startRun(); });
-el.btnMenu.addEventListener('click', () => { showMenu(); startMusic(); setPregame(true); });
-el.btnShift.addEventListener('click', () => { ensureAudio(); G.sfx('buy'); startShift(); });
+function launchStage(stage, withTutorial) {
+  ensureAudio();
+  G.sfx('buy');
+  stopMusic();
+  setPregame(false);
+  startRun(stage);
+  if (withTutorial || (stage === STAGES[0] && !storage.get('cbd_tutorial_done'))) {
+    startTutorial();
+  }
+}
 
-/* Dismissing the SHIFT REPORT routes through the mandatory ERA REPORT
- * when the next shift crosses a decade boundary. */
+el.btnStageStart.addEventListener('click', () => { if (G.pendingStage) launchStage(G.pendingStage); });
+el.btnStageBack.addEventListener('click', () => { ensureAudio(); el.stageIntro.classList.add('hidden'); showMenu(); });
+el.btnRetry.addEventListener('click', () => { ensureAudio(); if (G.stage) launchStage(G.stage); });
+el.btnNextStage.addEventListener('click', () => {
+  ensureAudio();
+  const idx = STAGES.indexOf(G.stage);
+  const next = STAGES[idx + 1];
+  if (next && stageUnlocked(idx + 1)) { el.result.classList.add('hidden'); showStageIntro(next); }
+});
+el.btnMenu.addEventListener('click', () => { stopGameMusic(); showMenu(); startMusic(); setPregame(true); });
+el.btnShift.addEventListener('click', () => { ensureAudio(); G.sfx('buy'); startShift(); });
+el.btnTutorial.addEventListener('click', () => { el.menu.classList.add('hidden'); launchStage(STAGES[0], true); });
+
 function dismissShiftReport(startNext) {
   ensureAudio();
   el.report.classList.add('hidden');
-  if (G.pendingEraReport) {
-    G.sfx('era');
-    showEraReport(G.pendingEraReport, startNext);
-    return;
-  }
+  flushBanners();
   if (startNext) { G.sfx('buy'); startShift(); }
   else refreshShiftButton();
 }
-el.btnEraContinue.addEventListener('click', () => {
-  const startNext = el.eraReport.dataset.startNext === '1';
-  el.eraReport.classList.add('hidden');
-  G.pendingEraReport = null;
-  if (startNext) { G.sfx('buy'); startShift(); }
-  else refreshShiftButton();
-});
-
-el.inspClose.addEventListener('click', () => el.inspector.classList.add('hidden'));
-
-// Private-wing risk lever: arm during cool-off, applies to the next shift.
-el.btnWing.addEventListener('click', () => {
-  ensureAudio();
-  G.privateWingArmed = !G.privateWingArmed;
-  G.sfx(G.privateWingArmed ? 'buy' : 'denied');
-  refreshShiftButton();
-});
 el.btnNextShift.addEventListener('click', () => dismissShiftReport(true));
 el.btnKeepBuilding.addEventListener('click', () => dismissShiftReport(false));
+
+el.shopTechHead.addEventListener('click', () => { ensureAudio(); G.sfx('assign'); toggleTechDrawer(); });
 
 /* Intro screen: the click-through IS the autoplay gesture — it
  * unlocks WebAudio and starts the theme in one move. */
@@ -68,16 +66,6 @@ el.btnMute.addEventListener('click', () => {
 });
 refreshMuteButton();
 
-/* VOICE: cycle through the available narrator system voices. */
-el.btnVoice.addEventListener('click', () => {
-  const name = cycleNarratorVoice();
-  if (!name) { showBanner('NO SYSTEM VOICES AVAILABLE', 'info', 2); return; }
-  el.btnVoice.title = `Narrator voice: ${name}`;
-  showBanner(`NARRATOR VOICE: ${name.toUpperCase()}`, 'info', 2.5);
-  try { speechSynthesis.cancel(); } catch (_) { /* ignore */ }
-  speakWithSynthesis('Testing, testing. This hospital is in capable hands.');
-});
-
 /* Intro EKG: scrolling pixel heartbeat trace. */
 function drawEkg(time) {
   const c = el.ekg, ec = c.getContext('2d');
@@ -100,6 +88,21 @@ function drawEkg(time) {
 }
 window.addEventListener('pointerdown', ensureAudio, { once: true });
 
+/* Global error surface: a public web game must never freeze silently.
+ * The banner tells the player; the console keeps the details. */
+let errorBannerShown = false;
+function surfaceError(err) {
+  console.error('[cbd]', err);
+  if (errorBannerShown) return;
+  errorBannerShown = true;
+  try {
+    el.banner.innerHTML = 'SOMETHING BROKE — PLEASE REFRESH<br/>(DETAILS IN THE CONSOLE)';
+    el.banner.classList.remove('hidden', 'info');
+  } catch (_) { /* if even the banner is broken, the console has it */ }
+}
+window.addEventListener('error', e => surfaceError(e.error || e.message));
+window.addEventListener('unhandledrejection', e => surfaceError(e.reason));
+
 let lastTs = 0;
 function frame(ts) {
   const dt = Math.min(0.05, (ts - lastTs) / 1000 || 0);
@@ -107,13 +110,12 @@ function frame(ts) {
   update(dt);
   render();
   refreshHud();
+  updateTutorial();
   if (!el.intro.classList.contains('hidden')) drawEkg(ts / 1000);
   requestAnimationFrame(frame);
 }
 
-buildShop();
-refreshShop();
-G.state = 'menu';                 // intro overlay is up; menu follows the click-through
+G.state = 'menu';                 // intro overlay is up; era select follows the click-through
 requestAnimationFrame(frame);
 
 // Debug/test hook (harmless in production; used by automated playtests)

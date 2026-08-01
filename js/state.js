@@ -7,6 +7,8 @@
 
 const G = {
   state: 'menu',            // 'menu' | 'playing' | 'won' | 'lost'
+  stage: null,              // the STAGES entry being played (era level select)
+  tech: {},                 // owned passive tech, key -> true
   time: 0,
   budget: 0,
   lives: 0,
@@ -17,18 +19,16 @@ const G = {
   patients: [],
   waitSpots: new Array(WAIT_SPOTS).fill(null),   // Patient refs
   upgrades: { labRouter: false, priorAuth: false },
-  // shift engine — 'cooloff' is player-paced (no arrivals, build/hire
-  // freely); a shift only starts when the player clicks START SHIFT.
-  shiftIdx: -1,
+  // wave engine — 'cooloff' is player-paced (no arrivals, build/hire
+  // freely); a wave only starts when the player clicks the button.
+  shiftIdx: -1,             // wave index within the current stage
   phase: 'cooloff',
   shiftElapsed: 0,
   schedule: [],
   shiftStats: null,         // per-shift report tally, reset by startShift()
-  // economy (docs/ECONOMY.md): soft debt, catch-up rails, risk lever
+  // economy (docs/ECONOMY.md): soft debt + catch-up rails
   accountsPayable: 0,       // salary/upkeep shortfall carried to next settle
   bailouts: 0,              // county bailouts taken (first free, rest cost stars)
-  privateWingArmed: false,  // toggled in cool-off, applies to the NEXT shift
-  privateWingActive: false, // in force for the CURRENT shift
   // camera (world -> canvas): render.js eases zoom toward the fit
   // for the visible floors; input.js inverts it for hit-testing.
   zoom: 1,
@@ -119,14 +119,39 @@ function hitRoom(px, py) {
   return G.rooms.find(r => r.contains(px, py)) || null;
 }
 
-/* ---------- Best-run persistence ---------- */
-function getBest() {
-  try { return JSON.parse(localStorage.getItem('cbd_ws_best') || 'null'); } catch (_) { return null; }
+/* ---------- Persistence (versioned, always guarded) ----------
+ * localStorage can throw in blocked-storage contexts (iframe embeds,
+ * strict cookie settings) — every access goes through this helper.
+ * cbd_v is the save-schema version: bump it + migrate here if a key's
+ * shape ever changes (e.g. renaming a stage id). */
+const SAVE_VERSION = 1;
+const storage = {
+  get(key, fallback = null) {
+    try { const v = localStorage.getItem(key); return v === null ? fallback : v; }
+    catch (_) { return fallback; }
+  },
+  set(key, val) {
+    try { localStorage.setItem(key, val); } catch (_) { /* blocked storage: play without saves */ }
+  },
+};
+if (storage.get('cbd_v') === null) storage.set('cbd_v', String(SAVE_VERSION));
+
+/* ---------- Stage progress (era level select) ---------- */
+function getStageProgress() {
+  try { return JSON.parse(storage.get('cbd_stage_stars', '{}')); } catch (_) { return {}; }
 }
 
-function setBest(stars, discharged) {
-  const b = getBest();
-  if (!b || stars > b.stars || (stars === b.stars && discharged > b.discharged)) {
-    localStorage.setItem('cbd_ws_best', JSON.stringify({ stars, discharged }));
+function stageStars(stageId) { return getStageProgress()[stageId] || 0; }
+
+function setStageStars(stageId, stars) {
+  const prog = getStageProgress();
+  if ((prog[stageId] || 0) < stars) {
+    prog[stageId] = stars;
+    storage.set('cbd_stage_stars', JSON.stringify(prog));
   }
+}
+
+/* A stage is playable if it's first or the previous one has >= 1 star. */
+function stageUnlocked(idx) {
+  return idx === 0 || stageStars(STAGES[idx - 1].id) >= 1;
 }

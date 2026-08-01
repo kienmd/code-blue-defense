@@ -76,9 +76,24 @@ const SFX = {
     tone(659, 0.22, 'square', 0.045, 0.28);
     tone(1046, 0.3, 'triangle', 0.03, 0.42);
   },
+  // paper rustle: quick noisy down-chirp as the report slides up
+  paper: () => {
+    tone(2200, 0.03, 'sawtooth', 0.02);
+    tone(1500, 0.03, 'sawtooth', 0.02, 0.03);
+    tone(900, 0.05, 'sawtooth', 0.018, 0.06);
+    tone(1900, 0.03, 'sawtooth', 0.015, 0.1);
+  },
 };
 
-function playSfx(name) { (SFX[name] || (() => {}))(); }
+const _sfxWarned = new Set();
+function playSfx(name) {
+  const fn = SFX[name];
+  if (!fn) {                       // never crash gameplay, but never hide the typo either
+    if (!_sfxWarned.has(name)) { _sfxWarned.add(name); console.warn(`[sfx] unknown sound "${name}"`); }
+    return;
+  }
+  fn();
+}
 
 /* ---------- Intro theme ----------
  * Hopeful hospital-heroic loop, 4 bars of 8th notes at 132 BPM:
@@ -144,4 +159,59 @@ function startMusic() {
 function stopMusic() {
   clearInterval(musicTimer);
   musicTimer = null;
+  stopGameMusic();
+}
+
+/* ---------- In-game music ----------
+ * A subtle low-volume bed that runs during play, era-flavored:
+ * tempo and lead waveform read the CURRENT ERA each step (1950s =
+ * slow triangle waltz feel, AI eras = brisk square/saw arps), and
+ * the cool-off phase drops to a sparser half-density variation.
+ * Same synth, same musicGain (narrator ducking + SND toggle apply).
+ */
+const GAME_BASS = [N.C3, 0, N.G2, 0, N.A2, 0, N.F2, 0, N.C3, 0, N.G3, 0, N.A2, 0, N.G2, 0];
+const GAME_ARP  = [N.C4, N.E4, N.G4, N.E4, N.A4, N.C5, N.E5, N.C5, N.F4, N.A4, N.C5, N.A4, N.G4, N.B4, N.D5, N.B4];
+
+let gameMusicTimer = null;
+let gameMusicStep = 0;
+let gameMusicNextT = 0;
+
+function eraMusicParams() {
+  const era = (typeof currentEra === 'function') ? currentEra() : null;
+  const idx = era ? ERAS.indexOf(era) : 0;
+  return {
+    bpm: Math.min(168, 96 + idx * 6),                       // decades speed up
+    wave: idx < 4 ? 'triangle' : (idx < 8 ? 'square' : 'sawtooth'),
+    sparse: (typeof G !== 'undefined' && G.phase === 'cooloff'),
+  };
+}
+
+function scheduleGameStep(step, t) {
+  const p = eraMusicParams();
+  const bass = GAME_BASS[step % GAME_BASS.length];
+  const arp = GAME_ARP[step % GAME_ARP.length];
+  if (bass) toneAt(bass, 0.28, 'triangle', 0.03, t, musicGain);
+  // cool-off: bass-only every other note — a sparser shop-phase bed
+  if (!p.sparse && arp && step % 2 === 0) toneAt(arp, 0.12, p.wave, 0.014, t, musicGain);
+  return 60 / p.bpm / 2;
+}
+
+function startGameMusic() {
+  ensureAudio();
+  if (!audioCtx || gameMusicTimer) return;
+  stopMusic();                                              // never over the intro theme
+  gameMusicStep = 0;
+  gameMusicNextT = audioCtx.currentTime + 0.2;
+  gameMusicTimer = setInterval(() => {
+    while (gameMusicNextT < audioCtx.currentTime + 0.5) {
+      const stepDur = scheduleGameStep(gameMusicStep, gameMusicNextT);
+      gameMusicStep = (gameMusicStep + 1) % 16;
+      gameMusicNextT += stepDur;
+    }
+  }, 150);
+}
+
+function stopGameMusic() {
+  clearInterval(gameMusicTimer);
+  gameMusicTimer = null;
 }

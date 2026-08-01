@@ -256,10 +256,18 @@ const PAYOUT_OUTCOME_MULT = { right: 1.0, wrong: 0.8, undiagnosed: 0.7 }; // "no
 const COPAY = 300;                    // per arrival — the income floor faucet
 const UPKEEP_RATE = 0.02;             // per shift, x room base build cost
 const BUILD_ESCALATION = 1.5;         // Nth copy of a room type: cost x1.5^(N-1). Break Room exempt (support).
-const ERA_GRANT_BASE = 150000;        // era-up grant, x inflation x (1 + 0.5*livesLost/START_LIVES)
-const PRIVATE_WING = { payoutMult: 1.3, icuPenalty: 75000 };  // opt-in risk lever, per shift
+// NOTE: ECONOMY.md's private-wing risk lever AND the era-up modernization
+// grant were CUT in implementation (user calls: wing removed outright; the
+// grant died with the per-stage pivot — each stage now sets its own budget).
 const BAILOUT_FLOOR = 16000;          // county bailout: 1 nurse hire + 1 shift of her salary
 const BAILOUT_TRIGGER = 6000;         // bail out when budget < cheapest hire (orderly), x inflation
+
+/* ---------- Staff staging / lobby posts (world px) ----------
+ * Promoted from inline literals so game-feel tuning stays in one file. */
+const HIRE_STAGING_X = 830;           // new hires walk to here (right of lobby)
+const HIRE_STAGING_GAP = 26;          // spacing between staged hires
+const LOBBY_POST_X = 170;             // first lobby triage post
+const LOBBY_POST_GAP = 120;           // spacing between lobby posts
 
 /* ---------- Agentic AI multipliers ----------
  * Zero physical footprint — they multiply the humans.
@@ -275,25 +283,79 @@ const BAILOUT_TRIGGER = 6000;         // bail out when budget < cheapest hire (o
  *               knowledge is worth (routing, not balance).
  *  - priorAuth: on the EXIT door. Discharge payout x1.25.
  */
+/* TECHNOLOGY shop (era-scoped per stage — see js/stages.js).
+ * "Agentic AI does not exist in this world" before its era: a 1950s
+ * stage lists ONLY 1950s tools; AI entries aren't even shown locked.
+ * Two kinds:
+ *   passive: true  — click to buy, applies hospital-wide multipliers
+ *                    (diagMult / treatMult / decayMult / payoutMult).
+ *   drag targets   — the classic AI trio (staff / lobby / exit).
+ */
 const UPGRADE_TYPES = {
+  // ---- period tech (passive) ----
+  pneumo: {
+    name: 'Pneumatic Tube Network', cost: 20000, era: '1950s', passive: true, unique: true,
+    diagMult: 0.9,
+    desc: 'Charts fly through the walls: lobby diagnosis 10% faster.',
+  },
+  crashcart: {
+    name: 'Crash Cart Fleet', cost: 30000, era: '1960s', passive: true, unique: true,
+    decayMult: 0.85,
+    desc: 'Resuscitation on wheels: waiting patients deteriorate 15% slower.',
+  },
+  pulseox: {
+    name: 'Pulse-Ox Monitors', cost: 40000, era: '1970s-80s', passive: true, unique: true,
+    treatMult: 1.1,
+    desc: 'Every bed monitored: all treatment 10% faster.',
+  },
+  pacs: {
+    name: 'Filmless Radiology (PACS)', cost: 60000, era: '1990s', passive: true, unique: true,
+    diagMult: 0.8,
+    desc: 'Images move over networks: diagnosis 20% faster.',
+  },
+  ehr: {
+    name: 'EHR Terminal', cost: 120000, era: '2000s', passive: true, unique: true,
+    diagMult: 0.85, payoutMult: 1.05,
+    desc: 'The chart goes digital: faster diagnosis, +5% reimbursements.',
+  },
+  telehealth: {
+    name: 'Telehealth Kiosk', cost: 90000, era: '2010s', passive: true, unique: true,
+    decayMult: 0.8,
+    desc: 'The doctor sees you now, on video: waiting decay -20%.',
+  },
+  regenpod: {
+    name: 'Regen Pod', cost: 400000, era: 'Y3K', passive: true, unique: true,
+    treatMult: 1.4,
+    desc: 'Full-body regeneration: all treatment 40% faster.',
+  },
+  // ---- the agentic AI trio (drag onto targets) ----
   scribe: {
-    name: 'Ambient AI Scribe', cost: 120000, target: 'staff', unique: false,
-    unlockShift: 6,                 // 2020s (docs/ERAS.md tech gating)
+    name: 'Ambient AI Scribe', cost: 120000, era: '2020s', target: 'staff', unique: false,
     stressMult: 0.5, rateMult: 1.3,
     desc: 'Drop on a staff member: -50% burnout gain, +30% treat speed.',
   },
-  labRouter: {
-    name: 'Agentic Lab-Router', cost: 300000, target: 'lobby', unique: true,
-    unlockShift: 7,                 // 2030s — the agentic ward
-    desc: 'Drop on the LOBBY: instant AI diagnosis + auto-assign to matching beds.',
-  },
   priorAuth: {
-    name: 'Prior-Auth Agent', cost: 180000, target: 'exit', unique: true,
-    unlockShift: 6,                 // 2020s
+    name: 'Prior-Auth Agent', cost: 180000, era: '2020s', target: 'exit', unique: true,
     payoutMult: 1.25,
     desc: 'Drop on the EXIT door: +25% budget per discharge.',
   },
+  labRouter: {
+    name: 'Agentic Lab-Router', cost: 300000, era: '2040s', target: 'lobby', unique: true,
+    desc: 'Drop on the LOBBY: instant AI diagnosis + auto-assign to matching beds.',
+  },
 };
+
+/* Passive-tech hospital-wide multipliers (bought techs live in G.tech). */
+function techMult(field) {
+  let m = 1;
+  if (typeof G !== 'undefined' && G.tech) {
+    for (const key of Object.keys(G.tech)) {
+      const def = UPGRADE_TYPES[key];
+      if (def && def[field]) m *= def[field];
+    }
+  }
+  return m;
+}
 
 /* ---------- Eras (round-defining decades; docs/ERAS.md) ----------
  * COMPRESSED 13-shift march (deviation from ERAS.md's 14+bonus,
@@ -324,91 +386,112 @@ const ERAS = [
   { startShift: 0, label: '1950s', sign: 'EST. 1952', inflation: 0.5,
     mods: { diag: 1.6, stress: 1.25, treat: 1.0, wait: 1.3 },
     scrub: '#e8ecec', wall: '#2b2519', shell: '#5e3a2c', roofStyle: 'cross',
+    people: { outfits: ['#6a5a48','#8a7a5c','#4a4a52','#5c5c48'], hat: 'fedora', accessory: 'soldier' },
+    backdrop: { sky: '#0b1020', skyline: 'lowrise', crosser: 'plane', street: 'oldcar' },
     sub: 'THE MODERN HOSPITAL IS BORN', body: 'OPEN-HEART SURGERY! THE ICU! AND EVERY CHART IS PAPER.',
     tech: ['1953 — HEART-LUNG MACHINE', '1953 — THE ICU IS INVENTED', '1955 — POLIO VACCINE AT SCALE'],
     impact: 'IRON-LUNG WARDS EMPTY AS THE POLIO VACCINE SCALES NATIONWIDE.' },
   { startShift: 1, label: '1960s', sign: '1960s', inflation: 0.6,
     mods: { diag: 1.5, stress: 1.2, treat: 1.0, wait: 1.3 },
     scrub: '#dff0df', wall: '#243024', shell: '#64402e', roofStyle: 'cross',
+    people: { outfits: ['#7a8a58','#a08a4a','#5a6a7a','#8a5a5a'], hat: 'fedora', accessory: null },
+    backdrop: { sky: '#0c1226', skyline: 'lowrise', crosser: 'plane', street: 'oldcar' },
     sub: 'RESUSCITATION GETS ORGANIZED', body: 'CPR IS INVENTED. CRASH CARTS ROLL. CARDIAC PATIENTS GET THEIR OWN WARD.',
     tech: ['1960 — CPR STANDARDIZED', '1962 — CORONARY CARE UNITS', '1965 — PORTABLE DEFIBRILLATOR'],
     impact: 'IN-HOSPITAL HEART-ATTACK DEATHS DROP SHARPLY ONCE CARDIAC PATIENTS ARE MONITORED TOGETHER.' },
   { startShift: 2, label: '1970s-80s', sign: '1970s-80s', inflation: 0.8,
     mods: { diag: 1.3, stress: 1.18, treat: 1.08, wait: 1.27 },
     scrub: '#4fb8a8', wall: '#2e2817', shell: '#5c6470', roofStyle: 'water',
+    people: { outfits: ['#c87a3a','#a04a8a','#4a8ac8','#c8b04a'], hat: null, accessory: null },
+    backdrop: { sky: '#100e26', skyline: 'midrise', crosser: 'jet', street: 'sedan' },
     sub: 'SEEING INSIDE THE BODY', body: 'CT! MRI! KEYHOLE SURGERY! PARAMEDICS HIT THE STREETS.',
     tech: ['1971 — CT SCANNER', '1983 — PULSE OXIMETERS', '1985 — KEYHOLE SURGERY'],
     impact: 'ANESTHESIA DEATHS FALL ROUGHLY TENFOLD AFTER PULSE OXIMETRY.' },
   { startShift: 3, label: '1990s', sign: '1990s', inflation: 1.0,
     mods: { diag: 1.15, stress: 1.1, treat: 1.15, wait: 1.25 },
     scrub: '#68a8d8', wall: '#262b31', shell: '#4e5a6e', roofStyle: 'ac',
+    people: { outfits: ['#4a6a9a','#6a6a6a','#8a4a4a','#3a7a5a'], hat: null, accessory: null },
+    backdrop: { sky: '#0b1224', skyline: 'midrise', crosser: 'jet', street: 'sedan' },
     sub: 'THE DIGITAL SEED', body: 'X-RAY FILM GOES FILMLESS. STENTS PROP ARTERIES OPEN.',
     tech: ['1994 — CORONARY STENT APPROVED', '1990s — FILMLESS RADIOLOGY (PACS)', '1994 — FIRST SURGICAL ROBOT'],
     impact: 'THE X-RAY LIGHTBOX RETIRES; IMAGES MOVE OVER NETWORKS.' },
   { startShift: 4, label: '2000s', sign: '2000s', inflation: 1.2,
     mods: { diag: 1.1, stress: 1.05, treat: 1.2, wait: 1.2 },
     scrub: '#4a8ad0', wall: '#232c3a', shell: '#31486e', roofStyle: 'glass',
+    people: { outfits: ['#5a5a6a','#7a8a9a','#4a4a4a','#9a7a5a'], hat: null, accessory: 'phone' },
+    backdrop: { sky: '#0a1428', skyline: 'highrise', crosser: 'jet', street: 'sedan' },
     sub: 'THE CHART GOES DIGITAL', body: 'UNCLE SAM PAYS HOSPITALS TO DITCH PAPER. E-PRESCRIBING KILLS THE FAX (ALMOST).',
     tech: ['2009 — HITECH ACT: EHR EVERYWHERE', '2001 — E-PRESCRIBING SCALES', '2000 — DA VINCI ROBOT APPROVED'],
     impact: 'US HOSPITALS ON ELECTRONIC RECORDS: ~10% TO ~96% IN A DECADE.' },
   { startShift: 5, label: '2010s', sign: '2010s', inflation: 1.5,
     mods: { diag: 0.85, stress: 1.0, treat: 1.3, wait: 1.1 },
     scrub: '#3a7ac8', wall: '#202c3e', shell: '#2c4a72', roofStyle: 'glass',
+    people: { outfits: ['#3a3a44','#6a4a8a','#4a7a8a','#8a8a92'], hat: null, accessory: 'phone' },
+    backdrop: { sky: '#091430', skyline: 'highrise', crosser: 'copter', street: 'sedan' },
     sub: 'CONNECTED + QUANTIFIED', body: 'THE DOCTOR WILL SEE YOU NOW — ON VIDEO. AI READS ITS FIRST SCANS.',
     tech: ['2015 — TELEHEALTH AT SCALE', '2018 — FIRST AUTONOMOUS IMAGING AI', '2018 — ECG ON YOUR WRIST'],
     impact: 'AI TAKES FIRST CALL IN RADIOLOGY; VITALS LEAVE THE BUILDING.' },
   { startShift: 6, label: '2020s', sign: '2020s', inflation: 1.8,
     mods: { diag: 0.7, stress: 0.85, treat: 1.4, wait: 1.0 },
     scrub: '#3aa8a0', wall: '#1e3038', shell: '#274460', roofStyle: 'helipad',
+    people: { outfits: ['#3a4a5a','#5a3a5a','#2a5a4a','#6a6a72'], hat: null, accessory: 'phone' },
+    backdrop: { sky: '#081230', skyline: 'glass', crosser: 'drone', street: 'ev' },
     sub: 'THE AI DECADE', body: 'IT LISTENS, WRITES THE NOTE, FILES THE CLAIM. THE HOSPITAL MAKES HOUSE CALLS AGAIN.',
     tech: ['2020s — AMBIENT AI SCRIBES', '2020 — HOSPITAL-AT-HOME', '2023 — LLMs ENTER THE CLINIC'],
     impact: 'FDA-CLEARED AI DEVICES PASS 1,000; 9 IN 10 SYSTEMS PILOT AI SCRIBES.' },
   { startShift: 7, label: '2030s', sign: '2030s', inflation: 2.2, autoDiag: true,
     mods: { diag: 0.5, stress: 0.75, treat: 1.5, wait: 0.95 },
     scrub: '#7a68d8', wall: '#241f3e', shell: '#33306a', roofStyle: 'helipad',
+    people: { outfits: ['#4a5a8a','#5a8a8a','#8a5a8a','#6a6aa0'], hat: null, accessory: 'visor' },
+    backdrop: { sky: '#0c0e34', skyline: 'glass', crosser: 'drone', street: 'ev' },
     sub: 'THE AGENTIC WARD', body: 'AI READS INTAKE, ORDERS THE WORKUP, BOOKS THE BED. YOU SUPERVISE.',
     tech: ['AGENTIC CARE ORCHESTRATION', 'THE SELF-MONITORING WARD', 'DIGITAL COMMAND CENTERS'],
     impact: 'FORECAST: DETERIORATION FLAGGED HOURS EARLY; STANDARD CASES DIAGNOSE THEMSELVES.' },
   { startShift: 8, label: '2040s', sign: '2040s', inflation: 2.8, autoDiag: true,
     mods: { diag: 0.35, stress: 0.65, treat: 1.7, wait: 0.9 },
     scrub: '#c8a040', wall: '#1e2f26', shell: '#3a3272', roofStyle: 'holo',
+    people: { outfits: ['#4a6a9a','#6a8aaa','#8a9aba','#5a7a9a'], hat: null, accessory: 'visor' },
+    backdrop: { sky: '#0e0c38', skyline: 'future', crosser: 'flyingcar', street: 'hover' },
     sub: 'THE HOSPITAL LOSES ITS WALLS', body: 'DRONES RUN THE HALLS. HALF YOUR WARD IS IN PATIENTS\' BEDROOMS.',
     tech: ['HOSPITAL-AT-HOME BY DEFAULT', 'AUTONOMOUS DRONE LOGISTICS', 'FIRST BIOPRINTED ORGANS'],
     impact: 'FORECAST: PRINTED HEART VALVES IN TRIALS; ORGAN COST HEADS UNDER $50K.' },
   { startShift: 9, label: '2050s', sign: '2050s', inflation: 3.5, autoDiag: true, autoAssign: true,
     mods: { diag: 0.25, stress: 0.55, treat: 1.9, wait: 0.85 },
     scrub: '#48c8c8', wall: '#1a2c33', shell: '#2c3c6e', roofStyle: 'holo',
+    people: { outfits: ['#3a8a9a','#5a9aaa','#7aaaba','#4a8a8a'], hat: null, accessory: 'visor' },
+    backdrop: { sky: '#0a103a', skyline: 'future', crosser: 'flyingcar', street: 'hover' },
     sub: 'REPAIR, DON\'T REPLACE', body: 'NANOBOTS CARRY THE MEDICINE. GENES GET SPELL-CHECKED.',
     tech: ['NANOMEDICINE AT THE BEDSIDE', 'BIOPRINTED ORGANS TO ORDER', 'DRAG-AND-DROP GENE EDITING'],
     impact: 'FORECAST: THE TRANSPLANT WAITLIST ENDS — ORGANS PRINT TO ORDER.' },
   { startShift: 10, label: '2075', sign: '2075', inflation: 5.0, autoDiag: true, autoAssign: true,
     mods: { diag: 0.15, stress: 0.45, treat: 2.2, wait: 0.8 },
     scrub: '#b8bcd0', wall: '#281f38', shell: '#3c2a6e', roofStyle: 'holo',
+    people: { outfits: ['#7a5ab0','#5a7ab0','#b05a9a','#8a6ac0'], hat: null, accessory: 'visor' },
+    backdrop: { sky: '#120a3a', skyline: 'future', crosser: 'ufo', street: 'hover' },
     sub: 'THE BODY SHOP', body: 'ORGANS REGROW IN PLACE. SWARMS PATROL YOUR BLOOD. AGING FILES AN APPEAL.',
     tech: ['IN-SITU REGENERATION', 'NANOBOT IMMUNE PATROLS', 'AGE-REVERSAL THERAPIES'],
     impact: 'SPECULATION: AI PHYSICIANS RUN STANDARD CARE; HUMANS OWN THE EXCEPTIONS.' },
   { startShift: 11, label: '2100', sign: '2100', inflation: 7.0, autoDiag: true, autoAssign: true,
     mods: { diag: 0.1, stress: 0.35, treat: 2.5, wait: 0.7 },
     scrub: '#e8d8a0', wall: '#2d2a1e', shell: '#443a5e', roofStyle: 'holo',
+    people: { outfits: ['#9a8a40','#b0a050','#8a7a60','#a09070'], hat: null, accessory: 'visor' },
+    backdrop: { sky: '#140f30', skyline: 'future', crosser: 'ufo', street: 'hover' },
     sub: 'MEDICINE IS INFRASTRUCTURE', body: 'ILLNESS IS CAUGHT BEFORE IT\'S FELT. MOSTLY, THE HOSPITAL HUMS.',
     tech: ['PRE-SYMPTOM DISEASE INTERCEPTION', 'FULL-BODY DIGITAL TWINS', 'CLINICAL LONGEVITY'],
     impact: 'SPECULATION: THE CENTURY-OLD PATIENT IS UNREMARKABLE.' },
   { startShift: 12, label: 'Y3K', sign: 'Y3K', inflation: 10, autoDiag: true, autoAssign: true,
     mods: { diag: 0.05, stress: 0.1, treat: 5.0, wait: 0.5 },
     scrub: '#c858e8', wall: '#150e2e', shell: '#2a1650', roofStyle: 'holo',
+    people: { outfits: ['#8a3ae0','#3ae0c8','#e03a8a','#40e05a'], hat: null, accessory: 'antenna' },
+    backdrop: { sky: '#170a40', skyline: 'y3k', crosser: 'ufo', street: 'hover' },
     sub: 'YEAR 3000 — TOTAL CARE', body: 'REGENERATION PODS. TELEPORT TRIAGE. ONE HUMAN REMAINS ON STAFF: YOU.',
     tech: ['FULL-BODY REGENERATION PODS', 'NANOBOT IMMUNE SWARMS', 'MATTER-STREAM TRIAGE'],
     impact: '100% CERTIFIED FANTASY. ENJOY THE VICTORY LAP.' },
 ];
-function eraForShift(i) {
-  let era = ERAS[0];
-  for (const e of ERAS) { if (e.startShift <= i) era = e; }
-  return era;
-}
-/* Era in force right now (pre-run and shift-1 cool-off count as the 1950s). */
+/* Era in force: FIXED PER STAGE (era level select — each stage is one
+ * decade). Pre-run defaults to the 1950s. */
 function currentEra() {
-  const idx = (typeof G !== 'undefined' && G.shiftIdx >= 0) ? G.shiftIdx : 0;
-  return eraForShift(idx);
+  return (typeof G !== 'undefined' && G.stage) ? ERAS[G.stage.eraIdx] : ERAS[0];
 }
 /* Age-of-War inflation on room/staff prices, rounded to $5. */
 function inflatedCost(base) {
@@ -429,6 +512,10 @@ const ERA_CARD_SECONDS = 5.4;   // slide in (0.5) + HOLD (4.0) + fade (0.9)
 const ERA_CARD_HOLD = 4.0;      // let the decade SIT — a click skips it
 
 /* ---------- Run structure ---------- */
-const START_BUDGET = 500000;    // seed grant: 1 ward + 2 nurses + working capital, OR a leaner build (ECONOMY.md 3e)
+// DEVIATION from ECONOMY.md ($500K): too rich in play — by shift 3 you
+// could buy everything you wanted. $280K at 1950s x0.5 prices buys ONE
+// lane opener (ward + 2 staff, OR ward + pharmacy nearly bare) and the
+// first cool-offs stay one-meaningful-purchase decisions.
+const START_BUDGET = 280000;
 const START_LIVES  = 5;         // ICU capacity — transfers that end the run
 const AUTO_ASSIGN_PERIOD = 1;   // labRouter scan interval (sec)

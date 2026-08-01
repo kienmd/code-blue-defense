@@ -1,7 +1,7 @@
 /* ============================================================
- * UI — DOM references, canvas setup, banner, HUD, menu/result
- * overlays, and the shop strip (icon cards + enable/disable
- * state). All DOM reads/writes live here.
+ * UI — DOM references, canvas setup, banner, HUD, era level
+ * select, stage intro, the pixel-paper wave report, and the
+ * era-scoped shop strip. All DOM reads/writes live here.
  * ============================================================ */
 
 const canvas = document.getElementById('game');
@@ -16,42 +16,45 @@ const el = {
   shift: document.getElementById('hud-shift'),
   waiting: document.getElementById('hud-waiting'),
   menu: document.getElementById('menu'),
-  menuBest: document.getElementById('menu-best'),
-  btnStart: document.getElementById('btn-start'),
+  stageStrip: document.getElementById('stage-strip'),
   result: document.getElementById('result'),
   resultTitle: document.getElementById('result-title'),
   resultStars: document.getElementById('result-stars'),
   resultDetail: document.getElementById('result-detail'),
   btnRetry: document.getElementById('btn-retry'),
+  btnNextStage: document.getElementById('btn-next-stage'),
   btnMenu: document.getElementById('btn-menu'),
   banner: document.getElementById('banner'),
   report: document.getElementById('report'),
+  reportPaper: document.getElementById('report-paper'),
   reportTitle: document.getElementById('report-title'),
   reportDetail: document.getElementById('report-detail'),
   reportLedger: document.getElementById('report-ledger'),
   reportFlavor: document.getElementById('report-flavor'),
+  reportStamp: document.getElementById('report-stamp'),
+  reportHand: document.getElementById('report-hand'),
   btnNextShift: document.getElementById('btn-next-shift'),
   btnKeepBuilding: document.getElementById('btn-keep-building'),
-  eraReport: document.getElementById('era-report'),
-  eraTitle: document.getElementById('era-title'),
-  eraSub: document.getElementById('era-sub'),
-  eraTech: document.getElementById('era-tech'),
-  eraImpact: document.getElementById('era-impact'),
-  eraMods: document.getElementById('era-mods'),
-  btnEraContinue: document.getElementById('btn-era-continue'),
+  stageIntro: document.getElementById('stage-intro'),
+  introEraTitle: document.getElementById('intro-era-title'),
+  introEraSub: document.getElementById('intro-era-sub'),
+  introEraTech: document.getElementById('intro-era-tech'),
+  introEraImpact: document.getElementById('intro-era-impact'),
+  introEraBrief: document.getElementById('intro-era-brief'),
+  btnStageStart: document.getElementById('btn-stage-start'),
+  btnStageBack: document.getElementById('btn-stage-back'),
   btnShift: document.getElementById('btn-shift'),
-  btnWing: document.getElementById('btn-wing'),
   shopRooms: document.getElementById('shop-rooms'),
   shopStaff: document.getElementById('shop-staff'),
-  shopUpgrades: document.getElementById('shop-upgrades'),
+  shopTechHead: document.getElementById('shop-tech-head'),
+  shopTechList: document.getElementById('shop-tech-list'),
   tooltip: document.getElementById('tooltip'),
   dragGhost: document.getElementById('drag-ghost'),
   intro: document.getElementById('intro'),
   ekg: document.getElementById('ekg'),
   btnMute: document.getElementById('btn-mute'),
-  btnVoice: document.getElementById('btn-voice'),
+  btnTutorial: document.getElementById('btn-tutorial'),
   inspector: document.getElementById('inspector'),
-  inspClose: document.getElementById('insp-close'),
   inspIcon: document.getElementById('insp-icon'),
   inspName: document.getElementById('insp-name'),
   inspFlavor: document.getElementById('insp-flavor'),
@@ -59,9 +62,21 @@ const el = {
   inspStatus: document.getElementById('insp-status'),
 };
 
-/* ---------- Banner ---------- */
+/* ---------- Banner (modal-aware: queue, never bleed through) ---------- */
 let bannerTimeout = null;
+const bannerQueue = [];
+
+function modalUp() {
+  return !el.report.classList.contains('hidden') ||
+    !el.stageIntro.classList.contains('hidden') ||
+    !el.result.classList.contains('hidden') ||
+    !el.menu.classList.contains('hidden');
+}
+
 function showBanner(html, kind, seconds) {
+  // A banner must never render through a modal overlay (the COUNTY
+  // BAILOUT-over-SHIFT-REPORT bug): queue it and flush on dismiss.
+  if (modalUp()) { bannerQueue.push([html, kind, seconds]); return; }
   el.banner.innerHTML = html;
   el.banner.classList.remove('hidden', 'info');
   if (kind === 'info') el.banner.classList.add('info');
@@ -69,62 +84,158 @@ function showBanner(html, kind, seconds) {
   bannerTimeout = setTimeout(() => el.banner.classList.add('hidden'), seconds * 1000);
 }
 
-/* ---------- HUD ---------- */
-function refreshHud() {
-  el.budget.textContent = fmtMoney(G.budget);
-  el.lives.innerHTML = `ICU ${'\u2665'.repeat(Math.max(0, G.lives))}${'\u2661'.repeat(Math.max(0, START_LIVES - G.lives))}`;
-  el.shift.textContent = G.phase === 'cooloff'
-    ? `COOL-OFF \u00b7 NEXT: SHIFT ${G.shiftIdx + 2}/${SHIFTS.length}`
-    : `SHIFT ${G.shiftIdx + 1}/${SHIFTS.length}`;
-  el.waiting.textContent = `WAITING ${waitingPatients().length}`;
+function flushBanners() {
+  if (modalUp() || !bannerQueue.length || G.state !== 'playing') { bannerQueue.length = 0; return; }
+  const [html, kind, seconds] = bannerQueue.shift();
+  bannerQueue.length = 0;               // only the freshest queued banner survives
+  showBanner(html, kind, seconds);
 }
 
-/* ---------- Menu / result overlays ---------- */
+/* ---------- HUD (runs at 60Hz: only write the DOM on change) ---------- */
+const hudCache = {};
+function hudSet(elem, key, value, asHtml) {
+  if (hudCache[key] === value) return;
+  hudCache[key] = value;
+  if (asHtml) elem.innerHTML = value; else elem.textContent = value;
+}
+
+function refreshHud() {
+  hudSet(el.budget, 'budget', fmtMoney(G.budget));
+  const maxLives = G.stage ? G.stage.lives : START_LIVES;
+  hudSet(el.lives, 'lives',
+    `ICU ${'\u2665'.repeat(Math.max(0, G.lives))}${'\u2661'.repeat(Math.max(0, maxLives - G.lives))}`, true);
+  const waveCount = G.stage ? G.stage.waves.length : 0;
+  hudSet(el.shift, 'shift', G.phase === 'cooloff'
+    ? `COOL-OFF \u00b7 NEXT: WAVE ${G.shiftIdx + 2}/${waveCount}`
+    : `WAVE ${G.shiftIdx + 1}/${waveCount}`);
+  let waiting = 0;
+  for (const p of G.patients) if (p.state === 'waiting') waiting++;
+  hudSet(el.waiting, 'waiting', `WAITING ${waiting}`);
+}
+
+/* ---------- Era level select (Angry Birds-style stage cards) ---------- */
+function stageThumb(stage) {
+  const era = ERAS[stage.eraIdx];
+  const c = document.createElement('canvas');
+  c.width = 84; c.height = 56;
+  const tctx = c.getContext('2d');
+  tctx.imageSmoothingEnabled = false;
+  tctx.fillStyle = (era.backdrop && era.backdrop.sky) || '#0a1a2f';
+  tctx.fillRect(0, 0, 84, 56);
+  // tiny era skyline + hospital block
+  tctx.fillStyle = '#0d1626';
+  tctx.fillRect(4, 30, 12, 26); tctx.fillRect(62, 22, 16, 34);
+  tctx.fillStyle = era.shell || '#5a4632';
+  tctx.fillRect(24, 18, 36, 38);
+  tctx.fillStyle = era.wall || '#233046';
+  for (let y = 24; y < 52; y += 8) for (let x = 28; x < 56; x += 8) tctx.fillRect(x, y, 5, 5);
+  tctx.fillStyle = PALETTE.red;
+  tctx.fillRect(38, 8, 8, 8);
+  tctx.fillStyle = PALETTE.white;
+  tctx.fillRect(41, 9, 2, 6); tctx.fillRect(39, 11, 6, 2);
+  return c;
+}
+
 function showMenu() {
   G.state = 'menu';
+  G.stage = null;
   el.result.classList.add('hidden');
-  const best = getBest();
-  el.menuBest.textContent = best
-    ? `BEST RUN: ${'\u2605'.repeat(best.stars)} \u00b7 ${best.discharged} PATIENTS HELPED`
-    : '';
+  el.report.classList.add('hidden');
+  el.stageIntro.classList.add('hidden');
+  el.stageStrip.innerHTML = '';
+  STAGES.forEach((stage, i) => {
+    const unlocked = stageUnlocked(i);
+    const stars = stageStars(stage.id);
+    const card = document.createElement('div');
+    card.className = 'stage-card' + (unlocked ? '' : ' locked');
+    card.appendChild(stageThumb(stage));
+    card.insertAdjacentHTML('beforeend',
+      `<div class="sc-era">${stage.id}</div>` +
+      `<div class="sc-name">${stage.name}</div>` +
+      `<div class="sc-stars">${unlocked
+        ? '\u2605'.repeat(stars) + '\u2606'.repeat(3 - stars)
+        : '\u{1F512}'}</div>`);
+    if (unlocked) {
+      card.addEventListener('click', () => { ensureAudio(); G.sfx('assign'); showStageIntro(stage); });
+    }
+    el.stageStrip.appendChild(card);
+  });
   el.menu.classList.remove('hidden');
 }
 
-/* ---------- Shift report + player-paced start button ---------- */
+/* ---------- Stage intro (the era LEARNING CARD, pre-play) ---------- */
+function showStageIntro(stage) {
+  const era = ERAS[stage.eraIdx];
+  G.pendingStage = stage;
+  el.introEraTitle.textContent = `${stage.year} \u2014 ${stage.name}`;
+  el.introEraSub.textContent = era.sub;
+  el.introEraTech.innerHTML = era.tech.map(t => `<div class="era-tech-line">${t}</div>`).join('');
+  el.introEraImpact.textContent = era.impact;
+  const techNames = stage.tech.map(k => UPGRADE_TYPES[k].name.toUpperCase()).join(', ');
+  el.introEraBrief.innerHTML =
+    `<div>STANDARD OF CARE: DIAG x${era.mods.diag} \u00b7 TREAT x${era.mods.treat} \u00b7 LOBBY DECAY x${era.mods.wait}</div>` +
+    `<div>BUDGET ${fmtMoney(stage.budget)} \u00b7 ${stage.waves.length} WAVES \u00b7 ICU CAPACITY ${stage.lives}</div>` +
+    `<div>TECHNOLOGY OF THE AGE: ${techNames}</div>` +
+    (era.autoDiag ? `<div class="lg-in">BASELINE: PATIENTS AUTO-DIAGNOSE ON ARRIVAL</div>` : '') +
+    (era.autoAssign ? `<div class="lg-in">BASELINE: AUTO-ASSIGN TO MATCHING BEDS</div>` : '');
+  el.menu.classList.add('hidden');
+  el.stageIntro.classList.remove('hidden');
+}
+
+/* ---------- Wave report: the pixel-paper handed up by the supervisor ---------- */
 function fmtSecs(s) {
   const m = Math.floor(s / 60), r = Math.floor(s % 60);
   return m ? `${m}:${String(r).padStart(2, '0')}` : `${r}s`;
 }
 
+/* 8-bit hand gripping the paper's bottom corner (drawn once). */
+let handDrawn = false;
+function drawReportHand() {
+  if (handDrawn) return;
+  handDrawn = true;
+  const c = el.reportHand;
+  const hctx = c.getContext('2d');
+  hctx.imageSmoothingEnabled = false;
+  const px = (x, y, w, h, col) => { hctx.fillStyle = col; hctx.fillRect(x * 4, y * 4, w * 4, h * 4); };
+  const SKIN = '#e8b088', SHADE = '#c08858', CUFF = '#3a6ea5';
+  // fist coming up from below, thumb pressed over the paper edge
+  px(3, 8, 10, 8, SKIN);          // fist
+  px(3, 14, 10, 2, SHADE);
+  px(2, 16, 12, 4, CUFF);         // scrub cuff
+  px(5, 2, 4, 7, SKIN);           // thumb over the page
+  px(5, 2, 4, 1, SHADE);
+  px(9, 3, 1, 5, SHADE);
+  // knuckle lines
+  px(6, 10, 1, 1, SHADE); px(9, 10, 1, 1, SHADE); px(12, 10, 1, 1, SHADE);
+}
+
 function showShiftReport() {
   const st = G.shiftStats;
-  el.reportTitle.textContent = `SHIFT ${G.shiftIdx + 1} REPORT`;
-  const era = eraForShift(G.shiftIdx);
+  const waveN = G.shiftIdx + 1;
+  el.reportTitle.textContent = `WAVE ${waveN} REPORT \u2014 ${G.stage.id}`;
   el.reportDetail.innerHTML =
-    `PATIENTS HELPED: <b>${st.helped}</b> \u00b7 ICU TRANSFERS: <b>${st.transfers}</b><br/>` +
-    `STAFF BURNOUTS: <b>${st.burnouts}</b>` +
-    (st.diagCount ? ` \u00b7 AVG TIME-TO-DIAGNOSIS: <b>${fmtSecs(st.diagTime / st.diagCount)}</b>` : '') + '<br/>' +
-    `ERA TECH (${era.label}): DIAG x${era.mods.diag} \u00b7 TREAT x${era.mods.treat} \u00b7 STRESS x${era.mods.stress}<br/>` +
-    `TOTALS \u2014 HELPED ${G.discharged} \u00b7 TRANSFERS ${G.transfers} \u00b7 BUDGET ${fmtMoney(G.budget)}`;
+    `<div>PATIENTS HELPED <b>${st.helped}</b> \u00b7 ICU TRANSFERS <b>${st.transfers}</b></div>` +
+    `<div>STAFF BURNOUTS <b>${st.burnouts}</b>` +
+    (st.diagCount ? ` \u00b7 AVG TIME-TO-DIAGNOSIS <b>${fmtSecs(st.diagTime / st.diagCount)}</b>` : '') + '</div>' +
+    `<div>STAGE TOTALS \u2014 HELPED ${G.discharged} \u00b7 TRANSFERS ${G.transfers}</div>`;
 
-  // Income/expense ledger (docs/ECONOMY.md 3d.6): faucets above the
-  // line, drains below, NET in big type — the economy teaches itself.
-  const income = st.earned + st.copays + st.grant;
-  const expense = st.salaries + st.upkeep + st.spent + st.penalties + st.apPrior;
+  // Income/expense ledger (docs/ECONOMY.md): faucets above the line,
+  // drains below, NET in big type — the economy teaches itself.
+  const income = st.earned + st.copays;
+  const expense = st.salaries + st.upkeep + st.spent + st.apPrior;
   const net = income - expense;
   const row = (label, amt, cls, sign) =>
     amt ? `<div class="${cls}">${sign}${fmtMoney(amt)} \u2014 ${label}</div>` : '';
   el.reportLedger.innerHTML =
     row('REIMBURSEMENTS', st.earned, 'lg-in', '+') +
     row('COPAYS', st.copays, 'lg-in', '+') +
-    row('MODERNIZATION GRANT', st.grant, 'lg-in', '+') +
     row('SALARIES', st.salaries, 'lg-out', '-') +
     row('ROOM UPKEEP', st.upkeep, 'lg-out', '-') +
     row('BUILDS / HIRES / TECH', st.spent, 'lg-out', '-') +
-    row('PRIVATE-WING SETTLEMENTS', st.penalties, 'lg-out', '-') +
     row('ACCOUNTS PAYABLE (PRIOR)', st.apPrior, 'lg-out', '-') +
-    `<div class="lg-net" style="color:${net >= 0 ? 'var(--green)' : 'var(--red)'}">NET ${net >= 0 ? '+' : ''}${fmtMoney(net)}</div>` +
-    (st.apCarried ? `<div class="lg-out">CARRIED TO NEXT SHIFT: ${fmtMoney(st.apCarried)} A/P</div>` : '');
+    `<div class="lg-net" style="color:${net >= 0 ? '#1d7a34' : '#a02020'}">NET ${net >= 0 ? '+' : ''}${fmtMoney(net)}</div>` +
+    (st.apCarried ? `<div class="lg-out">CARRIED FORWARD: ${fmtMoney(st.apCarried)} A/P</div>` : '');
+
   let flavor;
   if (st.helped === 0) flavor = 'ROUGH ONE. NOBODY WALKED OUT SMILING.';
   else if (st.fastestCure !== null && st.fastestCure < 20) flavor = `FASTEST CURE: ${fmtSecs(st.fastestCure)} \u2014 NICE HUSTLE.`;
@@ -132,64 +243,65 @@ function showShiftReport() {
   else if (st.burnouts > 0) flavor = 'THE BREAK ROOM IS CALLING. YOUR STAFF NEED IT.';
   else flavor = `FASTEST CURE: ${st.fastestCure === null ? '\u2014' : fmtSecs(st.fastestCure)} \u00b7 LONGEST WAIT: ${fmtSecs(st.longestWait)}`;
   el.reportFlavor.textContent = flavor;
-  el.btnNextShift.textContent = `START SHIFT ${G.shiftIdx + 2}`;
-  el.report.classList.remove('hidden');
-}
 
-/* Mandatory inter-round learning popup: what the coming decade
- * invented, what it changed in the real world, and exactly what it
- * does to your numbers next round (docs/ERAS.md era-up copy). */
-function showEraReport(era, startNext) {
-  const cur = eraForShift(G.shiftIdx);
-  el.eraTitle.textContent = `ENTERING THE ${era.label}`;
-  el.eraSub.textContent = era.sub;
-  el.eraTech.innerHTML = era.tech.map(t => `<div class="era-tech-line">${t}</div>`).join('');
-  el.eraImpact.textContent = era.impact;
-  const arrow = (label, from, to, lowerIsBetter) => {
-    const better = lowerIsBetter ? to < from : to > from;
-    const cls = to === from ? '' : (better ? 'lg-in' : 'lg-out');
-    return `<span class="${cls}">${label} x${from} \u2192 x${to}</span>`;
-  };
-  el.eraMods.innerHTML =
-    `<div>NEXT ROUND'S STANDARD OF CARE:</div>` +
-    `<div>${arrow('DIAG TIME', cur.mods.diag, era.mods.diag, true)} \u00b7 ` +
-    `${arrow('TREAT RATE', cur.mods.treat, era.mods.treat, false)} \u00b7 ` +
-    `${arrow('STRESS', cur.mods.stress, era.mods.stress, true)} \u00b7 ` +
-    `${arrow('LOBBY DECAY', cur.mods.wait, era.mods.wait, true)}</div>` +
-    (era.autoDiag && !cur.autoDiag ? `<div class="lg-in">NEW BASELINE: PATIENTS AUTO-DIAGNOSE ON ARRIVAL</div>` : '') +
-    (era.autoAssign && !cur.autoAssign ? `<div class="lg-in">NEW BASELINE: AUTO-ASSIGN TO MATCHING BEDS</div>` : '') +
-    `<div>PRICES &amp; PAYOUTS: x${cur.inflation} \u2192 x${era.inflation} (INFLATION)</div>`;
-  el.btnEraContinue.textContent = startNext ? `START THE ${era.label}` : 'CONTINUE';
-  el.eraReport.classList.remove('hidden');
-  el.eraReport.dataset.startNext = startNext ? '1' : '';
+  // Supervisor's stamp: green PASSED if nobody was lost this wave.
+  const passed = st.transfers === 0;
+  el.reportStamp.textContent = passed ? 'PASSED' : 'NOTED';
+  el.reportStamp.classList.toggle('fail', !passed);
+
+  el.btnNextShift.textContent = `START WAVE ${waveN + 1}`;
+  drawReportHand();
+  el.report.classList.remove('hidden');
+  // retrigger the slide-in animation
+  el.reportPaper.classList.remove('slide-in');
+  void el.reportPaper.offsetWidth;
+  el.reportPaper.classList.add('slide-in');
+  G.sfx('paper');
 }
 
 function refreshShiftButton() {
   const show = G.state === 'playing' && G.phase === 'cooloff' &&
-    el.report.classList.contains('hidden') && el.eraReport.classList.contains('hidden');
+    el.report.classList.contains('hidden') && el.stageIntro.classList.contains('hidden');
   el.btnShift.classList.toggle('hidden', !show);
-  if (show) el.btnShift.textContent = `START SHIFT ${G.shiftIdx + 2}`;
-  // Private-wing lever rides along with the cool-off (ECONOMY.md 3a).
-  el.btnWing.classList.toggle('hidden', !show);
-  el.btnWing.classList.toggle('armed', G.privateWingArmed);
-  el.btnWing.textContent = `PRIVATE WING: ${G.privateWingArmed ? 'ON' : 'OFF'}`;
+  if (show) el.btnShift.textContent = `START WAVE ${G.shiftIdx + 2}`;
 }
 
 function showResult(won, stars) {
-  el.resultTitle.textContent = won ? 'ALL SHIFTS COMPLETE' : 'ICU AT CAPACITY';
+  const idx = STAGES.indexOf(G.stage);
+  const next = idx >= 0 && idx + 1 < STAGES.length ? STAGES[idx + 1] : null;
+  el.resultTitle.textContent = won ? `${G.stage.id} CLEARED` : 'ICU AT CAPACITY';
   el.resultTitle.style.color = won ? 'var(--green)' : 'var(--red)';
   el.resultStars.textContent = won ? '\u2605'.repeat(stars) + '\u2606'.repeat(3 - stars) : '';
   el.resultDetail.innerHTML =
     `PATIENTS HELPED: ${G.discharged}<br/>` +
     `ICU TRANSFERS: ${G.transfers}<br/>` +
     `FINAL BUDGET: ${fmtMoney(G.budget)}`;
+  el.btnNextStage.classList.toggle('hidden', !(won && next));
+  if (won && next) el.btnNextStage.textContent = `NEXT: ${next.id}`;
   el.result.classList.remove('hidden');
 }
 
-/* ---------- Inspector (left-side codex) ----------
- * Clicking ANY shop card — room, staff, AI tech, locked or owned —
- * opens a close-up: big pixel icon, flavor, exact mechanical stats,
- * cost, and unlock/owned status. */
+/* ---------- Inspector (hover codex) ----------
+ * Hovering ANY shop card — room, staff, technology — opens a
+ * close-up on the left after a short delay: big pixel icon, flavor,
+ * exact mechanical stats, cost, and owned status. Hover-only:
+ * vanishes on mouse-out, suppressed while dragging an upgrade. */
+let inspectorTimer = null;
+
+function hideInspector() {
+  clearTimeout(inspectorTimer);
+  inspectorTimer = null;
+  el.inspector.classList.add('hidden');
+}
+
+function scheduleInspector(kind, key) {
+  clearTimeout(inspectorTimer);
+  inspectorTimer = setTimeout(() => {
+    if (G.dragUpgrade) return;                  // never fight drag-and-drop
+    showInspector(kind, key);
+  }, 250);
+}
+
 function showInspector(kind, key) {
   const ictx = el.inspIcon.getContext('2d');
   ictx.imageSmoothingEnabled = false;
@@ -198,7 +310,7 @@ function showInspector(kind, key) {
   ictx.translate(48, kind === 'staff' ? 78 : 52);
   ictx.scale(3.4, 3.4);
   if (kind === 'room') drawRoomIcon(ictx, key, 0, 0);
-  else if (kind === 'staff') drawStaffSprite(ictx, key, 0, 0);
+  else if (kind === 'staff') drawStaffSprite(ictx, key, 0, 0, false, currentEra().scrub);
   else drawUpgradeIcon(ictx, key, 0, 0);
   ictx.restore();
 
@@ -210,7 +322,7 @@ function showInspector(kind, key) {
     const owned = G.rooms.filter(r => r.typeKey === key).length;
     stats =
       stat('BUILD COST', fmtMoney(roomBuildCost(key)) + (def.support ? '' : ' (x1.5/COPY)')) +
-      stat('UPKEEP', `${fmtMoney(Math.round(def.cost * UPKEEP_RATE * currentEra().inflation))}/SHIFT`) +
+      stat('UPKEEP', `${fmtMoney(Math.round(def.cost * UPKEEP_RATE * currentEra().inflation))}/WAVE`) +
       (def.support
         ? stat('EFFECT', `+${BREAKROOM_REGEN} STRESS RECOVERY/SEC (MAX ${BREAKROOM_CAP})`)
         : stat('BEDS', def.beds) + stat('STAFF SLOTS', def.staffSlots)) +
@@ -223,7 +335,7 @@ function showInspector(kind, key) {
     const owned = G.staffList.filter(s => s.typeKey === key).length;
     stats =
       stat('HIRE (SIGNING)', fmtMoney(inflatedCost(def.cost))) +
-      stat('SALARY', `${fmtMoney(Math.round(def.salary * currentEra().inflation))}/SHIFT`) +
+      stat('SALARY', `${fmtMoney(Math.round(def.salary * currentEra().inflation))}/WAVE`) +
       stat('TREAT RATE', `${def.treatRate}/SEC`) +
       stat('DIAGNOSIS', def.canDiagnose ? `${diagCapability(def)} — ${def.diagSeconds}S` : 'NO (CANNOT DIAGNOSE)') +
       stat('STRESS', `${def.stressPerSec}/SEC WORKING`) +
@@ -232,16 +344,18 @@ function showInspector(kind, key) {
     status = owned ? `ON PAYROLL: ${owned}` : 'NONE HIRED';
   } else {
     def = UPGRADE_TYPES[key];
-    const locked = upgradeLocked(def);
     stats =
       stat('COST', fmtMoney(inflatedCost(def.cost))) +
-      stat('TARGET', def.target.toUpperCase()) +
+      (def.passive ? stat('KIND', 'FACILITY INSTALL (ONE-TIME)') : stat('TARGET', def.target.toUpperCase())) +
+      (def.diagMult ? stat('DIAGNOSIS TIME', `x${def.diagMult}`) : '') +
+      (def.treatMult ? stat('ALL TREATMENT', `x${def.treatMult}`) : '') +
+      (def.decayMult ? stat('WAITING DECAY', `x${def.decayMult}`) : '') +
       (def.rateMult ? stat('TREAT SPEED', `x${def.rateMult}`) : '') +
       (def.stressMult ? stat('BURNOUT GAIN', `x${def.stressMult}`) : '') +
       (def.payoutMult ? stat('PAYOUTS', `x${def.payoutMult}`) : '') +
       (key === 'labRouter' ? stat('EFFECT', 'INSTANT AI DIAGNOSIS + AUTO-ASSIGN') : '') +
-      (def.unlockShift != null ? stat('UNLOCK ERA', eraForShift(def.unlockShift).label) : '');
-    if (locked) { status = `LOCKED — UNLOCKS ${eraForShift(def.unlockShift).label}`; statusCls = 'locked'; }
+      stat('ERA', def.era);
+    if (def.passive) status = G.tech[key] ? 'INSTALLED & ACTIVE' : 'AVAILABLE — CLICK TO INSTALL';
     else if (def.unique && G.upgrades[key]) status = 'INSTALLED & ACTIVE';
     else status = key === 'scribe' ? `DEPLOYED: ${G.staffList.filter(s => s.scribe).length}` : 'AVAILABLE — DRAG TO DEPLOY';
   }
@@ -254,8 +368,9 @@ function showInspector(kind, key) {
   el.inspector.classList.remove('hidden');
 }
 
-/* ---------- Shop strip ---------- */
-const shopButtons = { rooms: {}, staff: {}, upgrades: {} };
+/* ---------- Shop strip (rebuilt per stage — era-scoped) ---------- */
+const shopButtons = { rooms: {}, staff: {}, tech: {} };
+let techOpen = false;
 
 function iconCanvas(draw) {
   const c = document.createElement('canvas');
@@ -268,7 +383,7 @@ function iconCanvas(draw) {
   return c;
 }
 
-function makeShopItem(parent, iconDraw, name, cost, tooltipHtml, onActivate, drag, inspect) {
+function makeShopItem(parent, iconDraw, name, cost, tooltipHtml, onActivate, drag, inspectKind, inspectKey) {
   const item = document.createElement('div');
   item.className = 'shop-item' + (drag ? ' upgrade' : '');
   item.appendChild(iconCanvas(iconDraw));
@@ -276,23 +391,18 @@ function makeShopItem(parent, iconDraw, name, cost, tooltipHtml, onActivate, dra
     `<div class="si-name">${name.toUpperCase()}</div><div class="si-cost">${fmtMoney(cost)}</div>`);
   item.addEventListener(drag ? 'mousedown' : 'click', evt => {
     ensureAudio();
-    if (inspect) inspect();                    // the codex opens either way
-    if (item.classList.contains('locked')) { G.sfx('denied'); return; }
+    hideInspector();                             // click = pure buy/build
     if (item.classList.contains('disabled') || item.classList.contains('soldout')) { G.sfx('denied'); return; }
     onActivate(evt, item);
     if (drag) evt.preventDefault();
   });
-  item.addEventListener('mouseenter', () => { el.tooltip.innerHTML = tooltipHtml; });
+  item.addEventListener('mouseenter', () => {
+    el.tooltip.innerHTML = tooltipHtml;
+    scheduleInspector(inspectKind, inspectKey);
+  });
+  item.addEventListener('mouseleave', hideInspector);
   parent.appendChild(item);
   return item;
-}
-
-/* Era gating (docs/ERAS.md): a tech appears the shift its decade
- * begins; the cool-off BEFORE that shift counts as prep for it. */
-function upgradeLocked(def) {
-  if (def.unlockShift == null) return false;
-  const reach = G.phase === 'cooloff' ? G.shiftIdx + 1 : G.shiftIdx;
-  return reach < def.unlockShift;
 }
 
 /* "DIAGNOSIS: YES/SLOW/NO" — the capability line for tooltips + the
@@ -302,46 +412,80 @@ function diagCapability(def) {
   return def.diagSeconds <= 2 ? 'YES (FAST)' : 'SLOW (ASSESSMENT)';
 }
 
-function buildShop() {
-  for (const [key, def] of Object.entries(ROOM_TYPES)) {
+/* Rebuilt on every startRun: only the rooms / staff / TECHNOLOGY that
+ * exist in this stage's decade appear — agentic AI does not exist in
+ * a 1950s hospital, not even greyed out. */
+function buildShop(stage) {
+  el.shopRooms.innerHTML = '';
+  el.shopStaff.innerHTML = '';
+  el.shopTechList.innerHTML = '';
+  shopButtons.rooms = {}; shopButtons.staff = {}; shopButtons.tech = {};
+
+  for (const key of stage.rooms) {
+    const def = ROOM_TYPES[key];
     shopButtons.rooms[key] = makeShopItem(
       el.shopRooms,
       ictx => drawRoomIcon(ictx, key, 0, 0),
       def.name, def.cost,
       `<b>${def.name}</b> — ${def.desc} Builds instantly in the next open slot.` +
-        ` Upkeep ${fmtMoney(def.cost * UPKEEP_RATE)}/shift${def.support ? '' : '; repeat copies cost x1.5'}.`,
+        ` Upkeep ${fmtMoney(def.cost * UPKEEP_RATE)}/wave${def.support ? '' : '; repeat copies cost x1.5'}.`,
       () => { G.selection = null; buildRoom(key); },
-      false,
-      () => showInspector('room', key),
+      false, 'room', key,
     );
   }
-  for (const [key, def] of Object.entries(STAFF_TYPES)) {
+  for (const key of stage.staff) {
+    const def = STAFF_TYPES[key];
     shopButtons.staff[key] = makeShopItem(
       el.shopStaff,
-      ictx => drawStaffSprite(ictx, key, 0, 10),
+      ictx => drawStaffSprite(ictx, key, 0, 10, false, ERAS[stage.eraIdx].scrub),
       def.name, def.cost,
       `<b>${def.name}</b> — ${def.desc}` +
-        ` DIAGNOSIS: ${diagCapability(def)}. Salary ${fmtMoney(def.salary)}/shift.`,
+        ` DIAGNOSIS: ${diagCapability(def)}. Salary ${fmtMoney(def.salary)}/wave.`,
       () => hireStaff(key),
-      false,
-      () => showInspector('staff', key),
+      false, 'staff', key,
     );
   }
-  for (const [key, def] of Object.entries(UPGRADE_TYPES)) {
-    shopButtons.upgrades[key] = makeShopItem(
-      el.shopUpgrades,
-      ictx => drawUpgradeIcon(ictx, key, 0, -2),
-      def.name, def.cost,
-      `<b>${def.name}</b> — ${def.desc}`,
-      evt => startUpgradeDrag(key, evt),
-      true,
-      () => showInspector('upgrade', key),
-    );
+
+  // TECHNOLOGY drawer: compact header button + expandable list rows.
+  techOpen = false;
+  el.shopTechHead.textContent = `\u25B8 TECHNOLOGY (${stage.tech.length})`;
+  for (const key of stage.tech) {
+    const def = UPGRADE_TYPES[key];
+    const row = document.createElement('div');
+    row.className = 'tech-row';
+    row.appendChild(iconCanvas(ictx => drawUpgradeIcon(ictx, key, 0, -2)));
+    row.insertAdjacentHTML('beforeend',
+      `<div class="tr-name">${def.name.toUpperCase()}</div>` +
+      `<div class="tr-era">${def.era}</div>` +
+      `<div class="tr-cost">${fmtMoney(inflatedCost(def.cost))}</div>`);
+    row.addEventListener(def.passive ? 'click' : 'mousedown', evt => {
+      ensureAudio();
+      hideInspector();
+      if (row.classList.contains('disabled') || row.classList.contains('soldout')) { G.sfx('denied'); return; }
+      if (def.passive) buyTech(key);
+      else { startUpgradeDrag(key, evt); evt.preventDefault(); }
+    });
+    row.addEventListener('mouseenter', () => {
+      el.tooltip.innerHTML = `<b>${def.name}</b> — ${def.desc}`;
+      scheduleInspector('upgrade', key);
+    });
+    row.addEventListener('mouseleave', hideInspector);
+    el.shopTechList.appendChild(row);
+    shopButtons.tech[key] = row;
   }
+  el.shopTechList.classList.add('hidden');
+}
+
+function toggleTechDrawer(force) {
+  techOpen = force != null ? force : !techOpen;
+  el.shopTechList.classList.toggle('hidden', !techOpen);
+  const stage = G.stage;
+  el.shopTechHead.textContent = `${techOpen ? '\u25BE' : '\u25B8'} TECHNOLOGY (${stage ? stage.tech.length : 0})`;
 }
 
 function startUpgradeDrag(key, evt) {
   G.dragUpgrade = key;
+  hideInspector();
   el.dragGhost.innerHTML = '';
   const gc = document.createElement('canvas');
   gc.width = 36; gc.height = 36;
@@ -355,29 +499,24 @@ function startUpgradeDrag(key, evt) {
 }
 
 function refreshShop() {
+  if (!G.stage) return;
   const full = !nextBuildSlot();
-  for (const [key, def] of Object.entries(ROOM_TYPES)) {
-    const item = shopButtons.rooms[key];
+  for (const [key, item] of Object.entries(shopButtons.rooms)) {
     const cost = roomBuildCost(key);      // escalated for repeat copies, then inflated
     item.querySelector('.si-cost').textContent = fmtMoney(cost);
     item.classList.toggle('disabled', full || G.budget < cost);
   }
-  for (const [key, def] of Object.entries(STAFF_TYPES)) {
-    const item = shopButtons.staff[key];
-    const cost = inflatedCost(def.cost);
+  for (const [key, item] of Object.entries(shopButtons.staff)) {
+    const cost = inflatedCost(STAFF_TYPES[key].cost);
     item.querySelector('.si-cost').textContent = fmtMoney(cost);
     item.classList.toggle('disabled', G.budget < cost);
   }
-  for (const [key, def] of Object.entries(UPGRADE_TYPES)) {
-    const item = shopButtons.upgrades[key];
-    const sold = def.unique && G.upgrades[key];
-    const locked = upgradeLocked(def);
+  for (const [key, row] of Object.entries(shopButtons.tech)) {
+    const def = UPGRADE_TYPES[key];
     const cost = inflatedCost(def.cost);
-    item.classList.toggle('locked', locked);
-    item.querySelector('.si-cost').textContent = locked
-      ? `\u{1F512}${eraForShift(def.unlockShift).label}`
-      : fmtMoney(cost);
-    item.classList.toggle('soldout', !!sold);
-    item.classList.toggle('disabled', !sold && !locked && G.budget < cost);
+    const sold = def.passive ? !!G.tech[key] : (def.unique && G.upgrades[key]);
+    row.querySelector('.tr-cost').textContent = sold ? 'OWNED' : fmtMoney(cost);
+    row.classList.toggle('soldout', !!sold);
+    row.classList.toggle('disabled', !sold && G.budget < cost);
   }
 }

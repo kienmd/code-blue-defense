@@ -4,12 +4,14 @@
  * and the agentic auto-triage. Mutates G; renders nothing.
  * ============================================================ */
 
-/* ---------- Run lifecycle ---------- */
-function startRun() {
+/* ---------- Run lifecycle (one STAGE = one self-contained level) ---------- */
+function startRun(stage) {
+  G.stage = stage;
+  G.runToken = (G.runToken || 0) + 1;   // invalidates async callbacks from prior runs
   G.state = 'playing';
   G.time = 0;
-  G.budget = START_BUDGET;
-  G.lives = START_LIVES;
+  G.budget = stage.budget;
+  G.lives = stage.lives;
   G.discharged = 0;
   G.transfers = 0;
   G.rooms = [];
@@ -17,37 +19,52 @@ function startRun() {
   G.patients = [];
   G.waitSpots = new Array(WAIT_SPOTS).fill(null);
   G.upgrades = { labRouter: false, priorAuth: false };
+  G.tech = {};
   G.shiftIdx = -1;
   G.phase = 'cooloff';              // player-paced: build + hire, then click START
   G.schedule = [];
   G.shiftStats = freshShiftStats();
-  G.eraStats = {};
-  G.pendingEraReport = null;
   G.accountsPayable = 0;
   G.bailouts = 0;
-  G.privateWingArmed = false;
-  G.privateWingActive = false;
   G.selection = null;
   G.texts = [];
   G.particles = [];
+  G.zoom = 1;
+
+  // Pre-built era hospital: this stage's starting rooms + staff.
+  for (const pb of stage.prebuilt) {
+    G.rooms.push(new Room(pb.type, pb.floor, pb.slot));
+  }
+  for (const ps of stage.prestaff) {
+    const s = new Staff(ps.type);
+    s.x = HIRE_STAGING_X - (G.staffList.length % 4) * HIRE_STAGING_GAP;
+    s.y = floorWalkY(0);
+    G.staffList.push(s);
+    if (ps.post === 'lobby') assignStaff(s, 'lobby');
+    else if (typeof ps.post === 'number' && G.rooms[ps.post]) assignStaff(s, G.rooms[ps.post]);
+    // teleport into position (no opening walk-in parade)
+    if (s.path.length) { const last = s.path[s.path.length - 1]; s.x = last.x; s.y = last.y; s.path = []; s.state = 'working'; }
+  }
+
   el.menu.classList.add('hidden');
   el.result.classList.add('hidden');
   el.report.classList.add('hidden');
   narratorReset();
-  showBanner('BUILD A WARD + HIRE A NURSE<br/>THEN START SHIFT 1', 'info', 4);
+  buildShop(stage);                 // era-scoped: only what EXISTS in this decade
   refreshShop();
   refreshShiftButton();
+  startGameMusic();
 }
 
 function freshShiftStats() {
   return {
     helped: 0, transfers: 0, burnouts: 0,
     fastestCure: null, longestWait: 0, diagCount: 0, diagTime: 0,
-    // ledger (docs/ECONOMY.md 3d.6) — faucets above the line, drains below
+    // ledger (docs/ECONOMY.md) — faucets above the line, drains below
     earned: 0,          // case reimbursements (outcome-scaled)
-    copays: 0, grant: 0,
-    spent: 0,           // builds / hires / tech this shift
-    salaries: 0, upkeep: 0, penalties: 0, apPrior: 0, apCarried: 0,
+    copays: 0,
+    spent: 0,           // builds / hires / tech this wave
+    salaries: 0, upkeep: 0, apPrior: 0, apCarried: 0,
   };
 }
 
@@ -79,100 +96,62 @@ function settleLedger() {
   }
 }
 
-/* Accumulate the finished shift into its era's bucket — the ERA REPORT
- * popup quantifies era-over-era improvement from these. */
-function foldShiftIntoEraStats() {
-  const idx = ERAS.indexOf(eraForShift(G.shiftIdx));
-  const bucket = G.eraStats[idx] || (G.eraStats[idx] = {
-    shifts: 0, helped: 0, transfers: 0, burnouts: 0, earned: 0, diagCount: 0, diagTime: 0,
-  });
-  const st = G.shiftStats;
-  bucket.shifts++;
-  bucket.helped += st.helped;
-  bucket.transfers += st.transfers;
-  bucket.burnouts += st.burnouts;
-  bucket.earned += st.earned + st.copays + st.grant;
-  bucket.drained = (bucket.drained || 0) + st.salaries + st.upkeep + st.penalties;
-  bucket.diagCount += st.diagCount;
-  bucket.diagTime += st.diagTime;
-}
-
 function startShift() {
   if (G.state !== 'playing' || G.phase !== 'cooloff') return;
   G.shiftIdx++;
-  const shift = SHIFTS[G.shiftIdx];
+  const wave = G.stage.waves[G.shiftIdx];
   G.phase = 'shift';
   G.shiftElapsed = 0;
   G.schedule = [];
   G.shiftStats = freshShiftStats();
   el.report.classList.add('hidden');
   refreshShiftButton();
-  shift.entries.forEach((entry, ei) => {
+  wave.entries.forEach((entry, ei) => {
     for (let i = 0; i < entry.count; i++) {
       G.schedule.push({ t: 1 + ei * 1.7 + i * entry.interval, type: entry.type });
     }
   });
   G.schedule.sort((a, b) => a.t - b.t);
 
-  // Private-wing contract: armed in cool-off, in force for THIS shift.
-  G.privateWingActive = G.privateWingArmed;
-  G.privateWingArmed = false;
-  if (G.privateWingActive) {
-    showBanner('PRIVATE WING CONTRACT ACTIVE<br/>PAYOUTS x1.3 — ICU TRANSFERS COST A SETTLEMENT', 'alert', 4);
-  }
-
-  // Era title card defines the round (docs/ERAS.md decade march).
-  // Only sweep it when the decade CHANGES (the 2020s span two shifts).
-  const era = eraForShift(G.shiftIdx);
-  const prevEra = G.shiftIdx > 0 ? eraForShift(G.shiftIdx - 1) : null;
-  if (era !== prevEra) {
+  // The stage's decade card sweeps once, at wave 1 (Age of War beat).
+  if (G.shiftIdx === 0) {
+    const era = currentEra();
     G.eraCard = { t: 0, label: era.label, sub: era.sub, body: era.body };
     G.sfx('era');
     narrate(`era_${era.label}`, { always: true });
-    // Era modernization grant (ECONOMY.md 3a): inverse-performance
-    // catch-up faucet — Hill-Burton / HITECH flavored, capped gently.
-    if (G.shiftIdx > 0) {
-      const livesLost = START_LIVES - G.lives;
-      const grant = Math.round(ERA_GRANT_BASE * era.inflation * (1 + 0.5 * livesLost / START_LIVES));
-      G.budget += grant;
-      G.shiftStats.grant += grant;
-      G.addText(WORLD_W / 2, floorTopY(1) - 20, `MODERNIZATION GRANT +${fmtMoney(grant)}`, PALETTE.amber, 3);
-    }
   }
-  if (G.shiftIdx === SHIFTS.length - 1) narrate('finalShift');
-  if (shift.banner) { showBanner(shift.banner, 'alert', 3); G.sfx('siren'); }
+  if (G.shiftIdx === G.stage.waves.length - 1) narrate('finalShift');
+  if (wave.banner) { showBanner(wave.banner, 'alert', 3); G.sfx('siren'); }
+}
+
+function stageStarRating() {
+  let stars = G.transfers === 0 ? 3 : (G.transfers <= 2 ? 2 : 1);
+  // County bailouts past the first free one ding the rating (rail 3).
+  return Math.max(1, stars - Math.max(0, G.bailouts - 1));
 }
 
 function endRun(won) {
-  if (won) foldShiftIntoEraStats();          // bank the final shift
   G.state = won ? 'won' : 'lost';
   G.selection = null;
   let stars = 0;
   if (won) {
-    stars = G.transfers === 0 ? 3 : (G.transfers <= 2 ? 2 : 1);
-    // County bailouts past the first free one ding the rating (rail 3).
-    stars = Math.max(1, stars - Math.max(0, G.bailouts - 1));
-    setBest(stars, G.discharged);
+    settleLedger();                          // final wave's drains still land
+    stars = stageStarRating();
+    setStageStars(G.stage.id, stars);
   }
   showResult(won, stars);
   refreshShiftButton();
   narrate(won ? 'win' : 'lose', { always: true });
+  stopGameMusic();
   if (won) { playSfx('discharge'); setTimeout(() => playSfx('buy'), 200); } else { playSfx('transfer'); }
 }
 
 function endShift() {
-  // Round over: show the SHIFT REPORT, then hold in player-paced
-  // cool-off until they click START SHIFT N+1. If the next shift
-  // changes decade, a mandatory ERA REPORT gates the transition
-  // (main.js shows it when the shift report is dismissed).
+  // Wave over: hand over the paperwork, then hold in player-paced
+  // cool-off until the next wave is started.
   G.phase = 'cooloff';
   G.selection = null;
-  G.privateWingActive = false;
   settleLedger();                   // salaries + upkeep + accounts payable
-  foldShiftIntoEraStats();
-  const cur = eraForShift(G.shiftIdx);
-  const next = G.shiftIdx + 1 < SHIFTS.length ? eraForShift(G.shiftIdx + 1) : null;
-  G.pendingEraReport = (next && next !== cur) ? next : null;
   showShiftReport();
   refreshShiftButton();
   refreshShop();
@@ -196,14 +175,19 @@ function spawnPatient(type) {
   G.budget += copay;
   G.shiftStats.copays += copay;
 
+  // Async callbacks below must not leak into a NEW run: a slow LLM
+  // response arriving after a retry/stage-change would otherwise
+  // mutate the fresh run's stats. runToken changes on every startRun.
+  const run = G.runToken;
+
   // Presenting complaint: fire-and-forget flavor (LLM or canned table).
-  generateComplaint(p).then(line => { if (!p.outcome) p.complaint = line; });
+  generateComplaint(p).then(line => { if (G.runToken === run && !p.outcome) p.complaint = line; });
 
   // AGENTIC LAB-ROUTER (or the free 2030s+ era baseline):
   // instant AI diagnosis on arrival.
   if (G.upgrades.labRouter || currentEra().autoDiag) {
     simulateAgenticDecision(p).then(decision => {
-      if (p.outcome || p.diagnosed) return;
+      if (G.runToken !== run || p.outcome || p.diagnosed) return;
       p.diagnosed = true;
       G.shiftStats.diagCount++;
       G.shiftStats.diagTime += G.time - p.spawnT;
@@ -254,7 +238,7 @@ function assignStaff(staff, dest) {
     staff.room = 'lobby';
     staff.state = 'walking';
     const idx = lobbyStaff().length - 1;     // position by arrival order
-    staff.path = pathFrom(staff, 170 + Math.min(2, idx) * 120, 0);
+    staff.path = pathFrom(staff, LOBBY_POST_X + Math.min(2, idx) * LOBBY_POST_GAP, 0);
   } else {
     if (!dest.hasStaffSpace() || dest.def.support) { G.sfx('denied'); return false; }
     dest.staff.push(staff);
@@ -276,7 +260,7 @@ function hireStaff(typeKey) {
   const s = new Staff(typeKey);
   s.x = -20; s.y = floorWalkY(0);
   s.state = 'walking';
-  s.path = [{ x: 830 - (G.staffList.length % 4) * 26, y: floorWalkY(0) }];
+  s.path = [{ x: HIRE_STAGING_X - (G.staffList.length % 4) * HIRE_STAGING_GAP, y: floorWalkY(0) }];
   G.staffList.push(s);
   G.selection = { kind: 'staff', obj: s };
   G.addText(200, floorWalkY(0) - 40, `${def.name.toUpperCase()} HIRED — CLICK A ROOM`, PALETTE.blue, 2);
@@ -303,6 +287,21 @@ function buildRoom(typeKey) {
   refreshShop();
 }
 
+/* Passive TECHNOLOGY purchase (era tech: tubes, PACS, EHR, regen pod…).
+ * The drag-target AI trio still goes through input.js's dropUpgrade. */
+function buyTech(typeKey) {
+  const def = UPGRADE_TYPES[typeKey];
+  if (G.tech[typeKey]) { G.sfx('denied'); return; }
+  const cost = inflatedCost(def.cost);
+  if (G.budget < cost) { G.sfx('denied'); return; }
+  G.budget -= cost;
+  G.shiftStats.spent += cost;
+  G.tech[typeKey] = true;
+  G.addText(WORLD_W / 2, floorTopY(1) - 16, `${def.name.toUpperCase()} INSTALLED`, PALETTE.toxic, 2.2);
+  G.sfx('buy');
+  refreshShop();
+}
+
 /* ---------- Frame update ---------- */
 function update(dt) {
   if (G.state !== 'playing') return;
@@ -319,10 +318,14 @@ function update(dt) {
       }
     }
     if (!G.schedule.length && G.patients.length === 0) {
-      if (G.shiftIdx >= SHIFTS.length - 1) { endRun(true); return; }
+      if (G.shiftIdx >= G.stage.waves.length - 1) { endRun(true); return; }
       endShift();
     }
   }
+
+  // Cached once per tick: Patient.decayMult reads this per patient per
+  // frame — filtering the staff list there was O(patients x staff).
+  G.calmOrderlies = lobbyStaff().filter(s => s.typeKey === 'orderly' && !s.isBurnedOut(G.time)).length;
 
   updatePatients(dt);
   updateStaff(dt);
@@ -347,15 +350,25 @@ function update(dt) {
     if (G.eraCard.t > ERA_CARD_SECONDS) G.eraCard = null;
   }
 
-  for (const t of G.texts) t.t += dt;
-  G.texts = G.texts.filter(t => t.t < t.life);
-  for (const pt of G.particles) {
-    pt.t += dt;
+  // In-place compaction (no per-frame array allocation)
+  compactExpiring(G.texts, dt, null);
+  compactExpiring(G.particles, dt, pt => {
     pt.x += pt.vx * dt;
     pt.y += pt.vy * dt;
     if (pt.grav) pt.vy += 160 * dt;
+  });
+}
+
+/* Advance `t` on every item, run `move`, and swap-remove expired ones. */
+function compactExpiring(arr, dt, move) {
+  let w = 0;
+  for (let i = 0; i < arr.length; i++) {
+    const item = arr[i];
+    item.t += dt;
+    if (move) move(item);
+    if (item.t < item.life) arr[w++] = item;
   }
-  G.particles = G.particles.filter(pt => pt.t < pt.life);
+  arr.length = w;
 }
 
 function updatePatients(dt) {
@@ -409,9 +422,8 @@ function dischargePatient(p) {
   // ECONOMY.md 3a) x Prior-Auth x private-wing x the decade's inflation.
   const outcome = !p.diagnosed ? 'undiagnosed'
     : (p.room && p.room.treats(p.typeKey)) ? 'right' : 'wrong';
-  let mult = PAYOUT_OUTCOME_MULT[outcome];
+  let mult = PAYOUT_OUTCOME_MULT[outcome] * techMult('payoutMult');
   if (G.upgrades.priorAuth) mult *= UPGRADE_TYPES.priorAuth.payoutMult;
-  if (G.privateWingActive) mult *= PRIVATE_WING.payoutMult;
   const pay = Math.round(p.def.payout * mult * currentEra().inflation);
   G.budget += pay;
   G.shiftStats.earned += pay;
@@ -437,14 +449,6 @@ function transferPatient(p) {
   p.state = 'transfer';
   p.transferT = 1.4;
   G.addText(p.x, p.y - 34, 'ICU TRANSFER', PALETTE.brightRed, 2);
-  // Private wing: the ONLY place a lost life ever costs money — and
-  // the player opted in (ECONOMY.md risk lever / rail 5).
-  if (G.privateWingActive) {
-    const penalty = Math.round(PRIVATE_WING.icuPenalty * currentEra().inflation);
-    chargeSoft(penalty);
-    G.shiftStats.penalties += penalty;
-    G.addText(p.x, p.y - 48, `SETTLEMENT -${fmtMoney(penalty)}`, PALETTE.amber, 2);
-  }
   G.sfx('transfer');
   narrate('firstTransfer');
 }
@@ -471,8 +475,8 @@ function updateStaff(dt) {
       if (s.diagPatient) {
         working = true;
         s.diagT += dt;
-        // Era baseline: better diagnostics each decade (docs/ERAS.md).
-        if (s.diagT >= s.def.diagSeconds * currentEra().mods.diag) {
+        // Era baseline x owned diagnostic tech (tubes, PACS, EHR…).
+        if (s.diagT >= s.def.diagSeconds * currentEra().mods.diag * techMult('diagMult')) {
           const p = s.diagPatient;
           p.diagnosed = true;
           G.shiftStats.diagCount++;
@@ -513,8 +517,8 @@ function updateRooms(dt) {
     const staffRate = r.staff
       .filter(s => s.state === 'working' && !s.isBurnedOut(G.time))
       .reduce((sum, s) => sum + s.rate(r), 0);
-    // Era baseline: standard-of-care treatment improves each decade.
-    const perBed = (ROOM_BASE_RATE + staffRate) * currentEra().mods.treat / occupied.length;
+    // Era baseline x owned treatment tech (pulse-ox, regen pod…).
+    const perBed = (ROOM_BASE_RATE + staffRate) * currentEra().mods.treat * techMult('treatMult') / occupied.length;
     for (const p of occupied) {
       let mult = 1;
       if (!p.diagnosed) mult = UNDIAGNOSED_MULT;

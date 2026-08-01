@@ -109,30 +109,123 @@ canvas#game {
 .overlay .tagline { font-size: 9px; line-height: 1.9; color: #9fb4c8; }
 .overlay .hint { font-size: 8px; color: #6d7f95; line-height: 1.8; max-width: 560px; }
 
-#level-cards { display: flex; gap: 16px; margin: 8px 0; }
-
-.level-card {
-  width: 170px;
-  padding: 14px 10px;
+/* ---------- Era level select (Angry Birds-style stage cards) ---------- */
+#stage-strip {
+  display: flex;
+  gap: 14px;
+  margin: 8px 0;
+  max-width: min(94vw, 1100px);
+  overflow-x: auto;
+  padding: 10px 6px 14px;
+  scrollbar-width: thin;
+}
+.stage-card {
+  flex: 0 0 128px;
+  padding: 10px 8px 12px;
   background: var(--panel);
   border: 3px solid var(--panel-edge);
   cursor: pointer;
   transition: transform .06s steps(2);
+  text-align: center;
 }
-.level-card:hover { transform: translateY(-3px); border-color: var(--blue); }
-.level-card.locked { opacity: .4; cursor: not-allowed; }
-.level-card .lv-num { font-size: 9px; color: var(--amber); }
-.level-card .lv-name { font-size: 10px; color: var(--ink); margin: 8px 0; line-height: 1.5; }
-.level-card .lv-desc { font-size: 7px; color: #8aa0b8; line-height: 1.7; min-height: 42px; }
-.level-card .lv-stars { font-size: 12px; color: var(--amber); margin-top: 8px; letter-spacing: 2px; }
+.stage-card:hover { transform: translateY(-4px); border-color: var(--blue); }
+.stage-card.locked { opacity: .38; cursor: not-allowed; filter: grayscale(.7); }
+.stage-card.locked:hover { transform: none; border-color: var(--panel-edge); }
+.stage-card canvas { width: 100%; image-rendering: pixelated; border: 2px solid #0a0f1e; display: block; }
+.stage-card .sc-era { font-size: 10px; color: var(--amber); margin-top: 8px; }
+.stage-card .sc-name { font-size: 6px; color: #9fb4c8; line-height: 1.6; margin-top: 6px; min-height: 20px; }
+.stage-card .sc-stars { font-size: 11px; color: var(--amber); margin-top: 6px; letter-spacing: 2px; }
 
 #result-stars { font-size: 30px; color: var(--amber); letter-spacing: 8px; }
 #result-detail { font-size: 9px; color: #9fb4c8; line-height: 1.9; }
 
-#report h1 { font-size: 18px; color: var(--amber); text-shadow: 4px 4px 0 #3a2600; }
-#report-detail { font-size: 9px; color: #9fb4c8; line-height: 2; }
-#report-detail b { color: var(--ink); }
-#report-flavor { color: var(--green); }
+/* ---------- Wave report: pixel paper held up by the supervisor ---------- */
+#report.report-overlay { justify-content: center; }
+
+#report-paper {
+  position: relative;
+  width: min(520px, 92vw);
+  padding: 34px 30px 26px;
+  background:
+    repeating-linear-gradient(to bottom, transparent 0 21px, rgba(90, 110, 160, .28) 21px 22px),
+    #e8e0c4;
+  color: #262218;
+  border: 3px solid #b8ac8a;
+  transform: rotate(-1.6deg);
+  box-shadow: 10px 14px 0 rgba(0, 0, 0, .45);
+  text-align: left;
+}
+#report-paper.slide-in { animation: paperslide .45s steps(6) both; }
+@keyframes paperslide {
+  from { transform: translateY(110%) rotate(4deg); }
+  to   { transform: translateY(0) rotate(-1.6deg); }
+}
+/* clipboard clip */
+#report-clip {
+  position: absolute;
+  top: -14px; left: 50%;
+  width: 92px; height: 22px;
+  transform: translateX(-50%);
+  background: #8a94a4;
+  border: 3px solid #4a5462;
+  box-shadow: inset 0 -5px 0 #67707e;
+}
+#report-clip::after {
+  content: '';
+  position: absolute;
+  top: -9px; left: 50%;
+  width: 26px; height: 12px;
+  transform: translateX(-50%);
+  border: 4px solid #4a5462;
+  border-bottom: none;
+}
+#report-paper h1 {
+  font-size: 14px;
+  color: #7a2020;
+  text-shadow: none;
+  text-align: center;
+  margin-bottom: 14px;
+  text-decoration: underline;
+}
+#report-detail { font-size: 8px; color: #3a3428; line-height: 2.4; }
+#report-detail b { color: #101008; }
+#report-flavor { font-size: 8px; color: #1d5a80; line-height: 2; margin: 8px 0 4px; font-style: italic; }
+#report-ledger { font-size: 8px; line-height: 2.4; color: #3a3428; margin: 8px 0; border-top: 2px dashed #b8ac8a; border-bottom: 2px dashed #b8ac8a; padding: 6px 0; }
+#report-ledger .lg-in { color: #1d7a34; }
+#report-ledger .lg-out { color: #a02020; }
+#report-ledger .lg-net { font-size: 11px; }
+/* red rubber stamp */
+#report-stamp {
+  position: absolute;
+  top: 40px; right: 18px;
+  padding: 8px 12px;
+  font-size: 15px;
+  color: #c02828;
+  border: 4px solid #c02828;
+  transform: rotate(12deg);
+  letter-spacing: 3px;
+  opacity: .82;
+  background: rgba(192, 40, 40, .06);
+  pointer-events: none;
+}
+#report-stamp.fail { color: #6a5a9a; border-color: #6a5a9a; background: rgba(106, 90, 154, .06); }
+/* the 8-bit hand gripping the bottom edge */
+#report-hand {
+  position: absolute;
+  bottom: -46px; left: 34px;
+  width: 64px; height: 80px;
+  image-rendering: pixelated;
+  transform: rotate(1.6deg);
+}
+#report-paper .btn-row { margin-top: 14px; justify-content: center; }
+.pxbtn.paper-btn {
+  background: #ddd4b4;
+  color: #262218;
+  border-color: #6a6046;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .25);
+}
+.pxbtn.paper-btn:hover { border-color: #7a2020; color: #7a2020; }
+.pxbtn.paper-btn.primary { background: #c8bc96; border-color: #7a2020; color: #7a2020; }
 
 /* Floating START SHIFT button during player-paced cool-off */
 #btn-shift {
@@ -144,16 +237,6 @@ canvas#game {
   animation: shiftpulse 1s steps(2) infinite;
 }
 @keyframes shiftpulse { 50% { border-color: var(--amber); color: var(--amber); } }
-
-/* Private-wing risk lever (cool-off only), beside START SHIFT */
-#btn-wing {
-  position: absolute;
-  bottom: 18px;
-  left: calc(50% + 130px);
-  z-index: 12;
-  font-size: 8px;
-}
-#btn-wing.armed { border-color: var(--amber); color: var(--amber); }
 
 /* Pre-game: blank the gameplay HUD stats and hide the shop until START */
 body.pregame .hud-item:not(.hud-btn) { visibility: hidden; }
@@ -171,17 +254,6 @@ body.pregame #shop { visibility: hidden; }
   padding: 12px 12px 14px;
   text-align: center;
 }
-#insp-close {
-  position: absolute;
-  top: 2px;
-  right: 4px;
-  font-family: var(--font);
-  font-size: 12px;
-  color: var(--red);
-  background: none;
-  border: none;
-  cursor: pointer;
-}
 #insp-icon { image-rendering: pixelated; background: #0d1424; border: 2px solid var(--panel-edge); }
 #insp-name { font-size: 10px; color: var(--amber); margin: 8px 0 6px; line-height: 1.5; }
 #insp-flavor { font-size: 7px; color: #9fb4c8; line-height: 1.8; margin-bottom: 8px; }
@@ -191,19 +263,12 @@ body.pregame #shop { visibility: hidden; }
 #insp-status.ok { color: var(--green); }
 #insp-status.locked { color: var(--amber); }
 
-/* Era learning popup */
-#era-report h1 { color: var(--amber); text-shadow: 4px 4px 0 #3a2600; font-size: 20px; }
-#era-report h2 { color: var(--blue); font-size: 10px; letter-spacing: 2px; }
-#era-tech { font-size: 8px; line-height: 2.2; color: var(--green); }
-#era-mods { font-size: 8px; line-height: 2.2; color: #9fb4c8; }
-#era-mods .lg-in { color: var(--green); }
-#era-mods .lg-out { color: var(--red); }
-
-/* Shift-report ledger */
-#report-ledger { font-size: 8px; line-height: 2; color: #9fb4c8; text-align: left; }
-#report-ledger .lg-in { color: var(--green); }
-#report-ledger .lg-out { color: var(--red); }
-#report-ledger .lg-net { font-size: 11px; color: var(--ink); }
+/* Stage intro (the era learning card, pre-play) */
+#stage-intro h1 { color: var(--amber); text-shadow: 4px 4px 0 #3a2600; font-size: 20px; }
+#stage-intro h2 { color: var(--blue); font-size: 10px; letter-spacing: 2px; }
+#intro-era-tech { font-size: 8px; line-height: 2.2; color: var(--green); }
+#intro-era-brief { font-size: 8px; line-height: 2.2; color: #9fb4c8; }
+#intro-era-brief .lg-in { color: var(--green); }
 
 .btn-row { display: flex; gap: 12px; }
 .pxbtn {
@@ -256,18 +321,31 @@ body.pregame #shop { visibility: hidden; }
   font-style: italic;
 }
 
-#narrator-setup { display: flex; flex-direction: column; gap: 6px; align-items: center; }
-#narrator-key {
-  font-family: var(--font);
-  font-size: 8px;
-  width: 300px;
-  padding: 6px 8px;
-  color: var(--ink);
-  background: #0e1428;
-  border: 2px solid var(--panel-edge);
-  outline: none;
+/* ---------- Tutorial: spotlight cutout + 8-bit instruction card ---------- */
+#tutorial {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;           /* the game stays clickable — that's the point */
 }
-#narrator-key:focus { border-color: var(--blue); }
+#tut-hole {
+  position: fixed;
+  border: 3px dashed var(--amber);
+  box-shadow: 0 0 0 9999px rgba(2, 4, 10, .72);
+  transition: left .12s, top .12s, width .12s, height .12s;
+}
+#tut-card {
+  position: fixed;
+  background: var(--panel);
+  border: 3px solid var(--amber);
+  box-shadow: 6px 6px 0 rgba(0, 0, 0, .5);
+  padding: 14px 16px;
+  z-index: 41;
+  pointer-events: auto;
+}
+#tut-text { font-size: 8px; line-height: 2; color: var(--ink); margin-bottom: 10px; }
+#tut-card .btn-row { justify-content: flex-end; }
+#tut-card .pxbtn { font-size: 8px; padding: 6px 10px; }
 
 /* ---------- Shop: one slim strip — the hospital is the star ---------- */
 #shop {
@@ -303,6 +381,49 @@ body.pregame #shop { visibility: hidden; }
 .shop-item .si-name { display: none; }   /* names live in the INFO panel on hover */
 .shop-item .si-cost { font-size: 6px; color: var(--green); margin-top: 2px; }
 .shop-item.upgrade .si-cost { color: var(--blue); }
+
+/* ---------- TECHNOLOGY drawer: header button + pop-up list ---------- */
+#shop-tech-group { position: relative; }
+.tech-head {
+  font-family: var(--font);
+  font-size: 7px;
+  color: var(--toxic);
+  background: #0e1428;
+  border: 2px solid var(--panel-edge);
+  padding: 5px 8px;
+  cursor: pointer;
+  margin-top: 8px;
+  white-space: nowrap;
+}
+.tech-head:hover { border-color: var(--toxic); }
+#shop-tech-list {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: 264px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 3px solid var(--panel-edge);
+  z-index: 16;
+  padding: 4px;
+}
+.tech-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+.tech-row:hover { border-color: var(--toxic); background: #101a30; }
+.tech-row.disabled { opacity: .35; cursor: not-allowed; }
+.tech-row.soldout { opacity: .55; cursor: default; }
+.tech-row.soldout .tr-cost { color: var(--toxic); }
+.tech-row canvas { width: 24px; height: 24px; image-rendering: pixelated; flex: 0 0 auto; }
+.tech-row .tr-name { font-size: 6px; color: var(--ink); line-height: 1.5; flex: 1 1 auto; }
+.tech-row .tr-era { font-size: 6px; color: var(--amber); flex: 0 0 auto; }
+.tech-row .tr-cost { font-size: 6px; color: var(--green); flex: 0 0 auto; min-width: 42px; text-align: right; }
 
 #tooltip-box { flex: 1 1 auto; min-width: 120px; }
 #tooltip { font-size: 7px; line-height: 1.7; color: #9fb4c8; max-height: 52px; overflow: hidden; }

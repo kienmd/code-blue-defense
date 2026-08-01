@@ -15,9 +15,8 @@
       <div id="hud">
         <span class="hud-item" id="hud-budget" title="Hospital budget">$0</span>
         <span class="hud-item" id="hud-lives" title="ICU capacity remaining">ICU</span>
-        <span class="hud-item" id="hud-shift" title="Shift">PREP</span>
+        <span class="hud-item" id="hud-shift" title="Wave">PREP</span>
         <span class="hud-item" id="hud-waiting" title="Patients in the waiting room">WAITING 0</span>
-        <button id="btn-voice" class="hud-item hud-btn" title="Cycle narrator voice">VOICE</button>
         <button id="btn-mute" class="hud-item hud-btn" title="Toggle sound">SND ON</button>
       </div>
     </header>
@@ -34,69 +33,82 @@
         <p class="hint">SOUND ON RECOMMENDED &middot; 8-BIT CHIPTUNE INSIDE</p>
       </div>
 
-      <!-- Main menu overlay -->
+      <!-- Era level select: Angry Birds-style stage cards -->
       <div id="menu" class="overlay hidden">
         <h1>CODE BLUE DEFENSE</h1>
         <h2>WARD SHIFT</h2>
-        <p class="tagline">Build the hospital. Diagnose the pathogen. Allocate the bed.<br/>
-          Thirteen shifts, 1950 to the year 3000. Nobody gets left in the waiting room.</p>
-        <button id="btn-start" class="pxbtn primary">START SHIFT 1</button>
-        <p id="menu-best" class="hint"></p>
-        <p class="hint">
-          BUILD rooms from the shop &mdash; they auto-place and the hospital grows &middot;
-          HIRE staff and click a room to assign them (lobby staff diagnose) &middot;
-          CLICK a patient, then a room, to allocate their bed &middot;
-          DRAG AI agents onto staff, the lobby, or the door.
-        </p>
-      </div>
-
-      <!-- End-of-shift report overlay -->
-      <div id="report" class="overlay hidden">
-        <h1 id="report-title">SHIFT 1 REPORT</h1>
-        <p id="report-detail"></p>
-        <div id="report-ledger"></div>
-        <p id="report-flavor" class="hint"></p>
+        <p class="tagline">Nine hospitals across nine ages of medicine.<br/>
+          Diagnose the pathogen. Allocate the bed. Nobody gets left in the waiting room.</p>
+        <div id="stage-strip"></div>
         <div class="btn-row">
-          <button id="btn-next-shift" class="pxbtn primary">START SHIFT 2</button>
-          <button id="btn-keep-building" class="pxbtn">KEEP BUILDING</button>
+          <button id="btn-tutorial" class="pxbtn">TUTORIAL</button>
         </div>
       </div>
 
-      <!-- Mandatory inter-round ERA REPORT: the learning popup that gates
-           each decade transition (docs/ERAS.md copy, ECONOMY.md grant). -->
-      <div id="era-report" class="overlay hidden">
-        <h1 id="era-title">ENTERING THE 1960s</h1>
-        <h2 id="era-sub"></h2>
-        <div id="era-tech"></div>
-        <p id="era-impact" class="hint"></p>
-        <div id="era-mods"></div>
-        <button id="btn-era-continue" class="pxbtn primary">CONTINUE</button>
+      <!-- Stage intro: the era learning card, shown before play -->
+      <div id="stage-intro" class="overlay hidden">
+        <h1 id="intro-era-title">1952 &mdash; FOUND THE HOSPITAL</h1>
+        <h2 id="intro-era-sub"></h2>
+        <div id="intro-era-tech"></div>
+        <p id="intro-era-impact" class="hint"></p>
+        <div id="intro-era-brief"></div>
+        <div class="btn-row">
+          <button id="btn-stage-start" class="pxbtn primary">START STAGE</button>
+          <button id="btn-stage-back" class="pxbtn">BACK</button>
+        </div>
       </div>
 
-      <!-- Player-paced start button (cool-off phase) + private-wing risk lever -->
-      <button id="btn-shift" class="pxbtn primary hidden">START SHIFT 1</button>
-      <button id="btn-wing" class="pxbtn hidden" title="Next shift: payouts x1.3, but each ICU transfer costs a settlement">PRIVATE WING: OFF</button>
+      <!-- End-of-wave report: pixel paper held up by the shift supervisor -->
+      <div id="report" class="overlay report-overlay hidden">
+        <div id="report-paper">
+          <div id="report-clip"></div>
+          <h1 id="report-title">WAVE 1 REPORT</h1>
+          <div id="report-detail"></div>
+          <div id="report-ledger"></div>
+          <p id="report-flavor"></p>
+          <div id="report-stamp">PASSED</div>
+          <div class="btn-row">
+            <button id="btn-next-shift" class="pxbtn paper-btn primary">START WAVE 2</button>
+            <button id="btn-keep-building" class="pxbtn paper-btn">KEEP BUILDING</button>
+          </div>
+          <canvas id="report-hand" width="64" height="80"></canvas>
+        </div>
+      </div>
+
+      <!-- Player-paced start button (cool-off phase) -->
+      <button id="btn-shift" class="pxbtn primary hidden">START WAVE 1</button>
 
       <!-- Win / loss overlay -->
       <div id="result" class="overlay hidden">
-        <h1 id="result-title">ALL SHIFTS COMPLETE</h1>
+        <h1 id="result-title">STAGE CLEARED</h1>
         <div id="result-stars"></div>
         <p id="result-detail"></p>
         <div class="btn-row">
-          <button id="btn-retry" class="pxbtn primary">NEW RUN</button>
-          <button id="btn-menu" class="pxbtn">MENU</button>
+          <button id="btn-next-stage" class="pxbtn primary hidden">NEXT ERA</button>
+          <button id="btn-retry" class="pxbtn">RETRY</button>
+          <button id="btn-menu" class="pxbtn">ERA SELECT</button>
         </div>
       </div>
 
-      <!-- Left-side inspector: close-up detail panel for any shop card
-           (rooms, staff, AI tech — locked or owned). -->
+      <!-- Left-side inspector: hover codex for any shop card -->
       <div id="inspector" class="hidden">
-        <button id="insp-close" title="Close">&times;</button>
         <canvas id="insp-icon" width="96" height="96"></canvas>
         <div id="insp-name"></div>
         <div id="insp-flavor"></div>
         <div id="insp-stats"></div>
         <div id="insp-status"></div>
+      </div>
+
+      <!-- Tutorial spotlight + instruction card -->
+      <div id="tutorial" class="hidden">
+        <div id="tut-hole"></div>
+        <div id="tut-card">
+          <div id="tut-text"></div>
+          <div class="btn-row">
+            <button id="btn-tut-next" class="pxbtn primary">NEXT</button>
+            <button id="btn-tut-skip" class="pxbtn">SKIP</button>
+          </div>
+        </div>
       </div>
 
       <!-- Shift / event banner -->
@@ -115,9 +127,9 @@
         <div class="shop-label">HIRE <span class="shop-note">(then click a room)</span></div>
         <div class="shop-items" id="shop-staff"></div>
       </div>
-      <div class="shop-group">
-        <div class="shop-label">AGENTIC AI <span class="shop-note">(drag on)</span></div>
-        <div class="shop-items" id="shop-upgrades"></div>
+      <div class="shop-group" id="shop-tech-group">
+        <button id="shop-tech-head" class="shop-label tech-head">&#9656; TECHNOLOGY</button>
+        <div id="shop-tech-list" class="hidden"></div>
       </div>
       <div class="shop-group" id="tooltip-box">
         <div class="shop-label">INFO</div>
@@ -136,11 +148,11 @@
     <script>window.ANTHROPIC_API_KEY = "sk-ant-...";</script>
   -->
   <!-- Plain scripts, shared global scope, load order matters:
-       data (constants/agentic/levels/entities) -> audio/narrator ->
-       state -> ui -> sim -> input -> render -> main (boot). -->
+       data (constants/agentic/stages/entities) -> audio/narrator ->
+       state -> ui -> sim -> input -> render -> tutorial -> main (boot). -->
   <script src="js/constants.js"></script>
   <script src="js/agentic.js"></script>
-  <script src="js/levels.js"></script>
+  <script src="js/stages.js"></script>
   <script src="js/entities.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/narrator.js"></script>
@@ -149,6 +161,7 @@
   <script src="js/sim.js"></script>
   <script src="js/input.js"></script>
   <script src="js/render.js"></script>
+  <script src="js/tutorial.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

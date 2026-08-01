@@ -17,14 +17,15 @@
  *     deterministic local fallback produces the same shaped
  *     output from a structured symptom table.
  *
- *  3. The DECISION drives presentation + routing (the floating
- *     callout, priority color), while the MECHANICAL effect is a
- *     fixed 30% complexity shred (UPGRADE_TYPES.labRouter
- *     .complexityShred). Keeping the shred percentage constant
- *     means game balance is deterministic and auditable even when
- *     a live, non-deterministic LLM is plugged in: the AI decides
- *     WHAT the patient has; the game decides how much that
- *     knowledge is worth.
+ *  3. The DECISION drives presentation (the floating callout,
+ *     priority color), while the MECHANICAL effect is fixed:
+ *     the Lab-Router grants instant diagnosis on arrival plus a
+ *     periodic auto-assign to matching beds (sim.js). Keeping the
+ *     mechanical effect constant means game balance is
+ *     deterministic and auditable even when a live,
+ *     non-deterministic LLM is plugged in: the AI decides WHAT
+ *     the patient has; the game decides how much that knowledge
+ *     is worth.
  * ============================================================ */
 
 const AGENTIC_CONFIG = {

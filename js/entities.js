@@ -62,7 +62,7 @@ class Patient {
     this.waitIndex = -1;
     this.room = null;
     this.bedIndex = -1;
-    this.outcome = null;            // 'discharged' | 'transferred'
+    this.outcome = null;            // 'walked_out' | 'transferred'
     this.aiTag = null;              // set by the Agentic Lab-Router
     this.complaint = null;          // first-person flavor (js/agentic.js)
     this.blurtT = 0;                // auto-blurt bubble timer on sit-down
@@ -81,11 +81,11 @@ class Patient {
 
   decayMult() {
     if (this.state === 'waiting' || this.state === 'arriving') {
-      // Era baseline (monitoring tech spots trouble sooner) softened
-      // further by orderlies posted on lobby duty.
-      let m = currentEra().mods.wait;
-      const calm = lobbyStaff().filter(s => s.typeKey === 'orderly' && !s.isBurnedOut(G.time)).length;
-      for (let i = 0; i < Math.min(ORDERLY_LOBBY_CAP, calm); i++) m *= STAFF_TYPES.orderly.lobbyCalm;
+      // Era baseline (monitoring tech spots trouble sooner), softened
+      // further by owned tech (crash carts, telehealth) and orderlies.
+      // G.calmOrderlies is cached once per tick in sim.update().
+      let m = currentEra().mods.wait * techMult('decayMult');
+      for (let i = 0; i < Math.min(ORDERLY_LOBBY_CAP, G.calmOrderlies || 0); i++) m *= STAFF_TYPES.orderly.lobbyCalm;
       return m;
     }
     if (this.state === 'inBed') {
@@ -180,9 +180,11 @@ class Room {
  * animations (shivers, cough pixels). */
 const DEFAULT_LOOK = { skin: '#f2c8a8', hair: '#5a4632', style: 1, gown: '#9fc4e8' };
 
-function drawPatientSprite(ctx, cx, cy, bobPhase, mood = 'sick', typeKey = null, t = 0, look = DEFAULT_LOOK) {
+function drawPatientSprite(ctx, cx, cy, bobPhase, mood = 'sick', typeKey = null, t = 0, look = DEFAULT_LOOK, people = null) {
   const bob = Math.round(Math.sin(bobPhase) * 1.5);
   const shiver = (mood === 'sick' && typeKey === 'flu') ? Math.round(Math.sin(t * 34) * 1) : 0;
+  // era street clothes: deterministic per patient (look.style seeds it)
+  const outfit = people ? people.outfits[(look.style + look.skin.length) % people.outfits.length] : null;
   ctx.save();
   ctx.translate(Math.round(cx + shiver), Math.round(cy + bob));
   // head
@@ -197,13 +199,33 @@ function drawPatientSprite(ctx, cx, cy, bobPhase, mood = 'sick', typeKey = null,
   if (look.style === 1) ctx.fillRect(-3, -21, 6, 2);                                   // flat
   else if (look.style === 2) { ctx.fillRect(-3, -23, 6, 4); }                          // tall
   else if (look.style === 3) { ctx.fillRect(-4, -20, 1, 3); ctx.fillRect(3, -20, 1, 3); ctx.fillRect(-3, -21, 6, 1); } // side tufts
+  // era headwear sits over the hair (1950s fedoras; Y3K antennae)
+  if (people && people.hat === 'fedora' && look.style !== 2 && outfit) {
+    ctx.fillStyle = outfit;
+    ctx.fillRect(-3, -23, 6, 3);                             // crown
+    ctx.fillRect(-5, -21, 10, 1);                            // brim
+  }
+  if (people && people.accessory === 'antenna') {
+    ctx.fillStyle = '#c8f0f8';
+    ctx.fillRect(0, -26, 1, 4);
+    ctx.fillStyle = '#40e05a';
+    if (Math.sin(t * 5) > 0) ctx.fillRect(-1, -27, 3, 2);
+  }
   // face
   ctx.fillStyle = PALETTE.ink;
   if (mood === 'happy') { ctx.fillRect(-2, -18, 1, 1); ctx.fillRect(1, -18, 1, 1); ctx.fillRect(-1, -16.5, 2, 1); }
   else { ctx.fillRect(-2, -18, 1, 1); ctx.fillRect(1, -18, 1, 1); }
-  // gown
+  if (people && people.accessory === 'visor') {
+    ctx.fillStyle = 'rgba(102,224,255,0.85)';                // cyber-visor over the eyes
+    ctx.fillRect(-3, -18.5, 6, 2);
+  }
+  // gown — with an era-colored jacket/coat layer at the shoulders
   ctx.fillStyle = look.gown;
   ctx.fillRect(-5, -15, 10, 11);
+  if (outfit) {
+    ctx.fillStyle = outfit;
+    ctx.fillRect(-5, -15, 2, 8); ctx.fillRect(3, -15, 2, 8); // coat lapels/sleeves
+  }
   ctx.fillStyle = PALETTE.white;
   ctx.fillRect(-2, -13, 4, 4);
   ctx.fillStyle = PALETTE.red;
@@ -212,9 +234,17 @@ function drawPatientSprite(ctx, cx, cy, bobPhase, mood = 'sick', typeKey = null,
   if (mood === 'happy') {
     ctx.fillStyle = look.skin;
     ctx.fillRect(-8, -19, 3, 3); ctx.fillRect(5, -19, 3, 3);
+  } else if (people && people.accessory === 'phone' && look.style % 2 === 0) {
+    ctx.fillStyle = '#12233a';                               // phone-zombie glow
+    ctx.fillRect(4, -12, 3, 5);
+    ctx.fillStyle = '#8ad8f0';
+    ctx.fillRect(4.5, -11, 2, 3);
+  } else if (people && people.accessory === 'soldier' && look.style === 3) {
+    ctx.fillStyle = '#5a6a3a';                               // returning GI: olive cap
+    ctx.fillRect(-3, -22, 6, 2);
   }
-  // legs
-  ctx.fillStyle = PALETTE.ink;
+  // legs — era trousers when street clothes are known
+  ctx.fillStyle = outfit || PALETTE.ink;
   ctx.fillRect(-4, -4, 3, 4); ctx.fillRect(1, -4, 3, 4);
 
   if (mood === 'sick' && typeKey) drawPresentingTell(ctx, typeKey, t, look);
@@ -430,6 +460,43 @@ function drawUpgradeIcon(ctx, key, cx, cy, s = 1) {
     ctx.fillStyle = PALETTE.grey; ctx.fillRect(-4, -6, 8, 1); ctx.fillRect(-4, -4, 8, 1); ctx.fillRect(-4, -2, 6, 1);
     ctx.fillStyle = PALETTE.green; ctx.fillRect(-3, 1, 7, 5);
     ctx.fillStyle = PALETTE.white; ctx.fillRect(-1, 2, 1, 1); ctx.fillRect(0, 3, 1, 1); ctx.fillRect(1, 2, 1, 1);
+  } else if (key === 'pneumo') {
+    // brass pneumatic tube with a chart capsule whooshing up
+    ctx.fillStyle = '#7a6a34'; ctx.fillRect(-3, -8, 6, 16);
+    ctx.fillStyle = '#b09a4c'; ctx.fillRect(-2, -8, 2, 16);
+    ctx.fillStyle = PALETTE.white; ctx.fillRect(-2, -2, 4, 6);
+    ctx.fillStyle = PALETTE.grey; ctx.fillRect(-1, 0, 2, 1); ctx.fillRect(-1, 2, 2, 1);
+  } else if (key === 'crashcart') {
+    ctx.fillStyle = PALETTE.red; ctx.fillRect(-7, -5, 14, 9);
+    ctx.fillStyle = PALETTE.white; ctx.fillRect(-2, -4, 4, 2); ctx.fillRect(-1, -5, 2, 4);
+    ctx.fillStyle = PALETTE.ink; ctx.fillRect(-6, 5, 3, 3); ctx.fillRect(3, 5, 3, 3);
+  } else if (key === 'pulseox') {
+    ctx.fillStyle = PALETTE.ink; ctx.fillRect(-8, -7, 16, 12);
+    ctx.fillStyle = '#0c1a2c'; ctx.fillRect(-6, -5, 12, 8);
+    ctx.fillStyle = PALETTE.green;
+    ctx.fillRect(-5, -1, 2, 1); ctx.fillRect(-3, -3, 1, 3); ctx.fillRect(-2, -1, 2, 1);
+    ctx.fillRect(0, -1, 1, 2); ctx.fillRect(1, -1, 4, 1);
+  } else if (key === 'pacs') {
+    ctx.fillStyle = PALETTE.ink; ctx.fillRect(-8, -6, 16, 12);
+    ctx.fillStyle = '#12233a'; ctx.fillRect(-6, -4, 5, 8); ctx.fillRect(1, -4, 5, 8);
+    ctx.fillStyle = PALETTE.white; ctx.fillRect(-5, -3, 3, 4); ctx.fillRect(2, -1, 3, 4);
+  } else if (key === 'ehr') {
+    ctx.fillStyle = PALETTE.grey; ctx.fillRect(-7, -7, 14, 10);
+    ctx.fillStyle = '#0c2818'; ctx.fillRect(-5, -5, 10, 6);
+    ctx.fillStyle = PALETTE.toxic; ctx.fillRect(-4, -4, 6, 1); ctx.fillRect(-4, -2, 8, 1);
+    ctx.fillStyle = PALETTE.grey; ctx.fillRect(-4, 3, 8, 2);
+  } else if (key === 'telehealth') {
+    ctx.fillStyle = PALETTE.deepBlue; ctx.fillRect(-7, -7, 14, 12);
+    ctx.fillStyle = '#12233a'; ctx.fillRect(-5, -5, 10, 8);
+    ctx.fillStyle = '#e8b088'; ctx.fillRect(-2, -4, 4, 4);   // a face on the call
+    ctx.fillStyle = PALETTE.white; ctx.fillRect(-3, 0, 6, 2);
+    ctx.fillStyle = PALETTE.green; ctx.fillRect(4, -6, 2, 2);
+  } else if (key === 'regenpod') {
+    ctx.fillStyle = '#0a3040'; ctx.fillRect(-5, -8, 10, 16);
+    ctx.fillStyle = '#66e0ff'; ctx.fillRect(-3, -6, 6, 12);
+    ctx.fillStyle = '#e8b088'; ctx.fillRect(-2, -4, 4, 3);
+    ctx.fillStyle = PALETTE.white; ctx.fillRect(-2, 0, 4, 5);
+    ctx.fillStyle = '#66e0ff'; ctx.fillRect(-6, -2, 1, 4); ctx.fillRect(5, -2, 1, 4);
   }
   ctx.restore();
 }

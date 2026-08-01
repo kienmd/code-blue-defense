@@ -6,11 +6,8 @@
 
 const FONT = '7px "Press Start 2P", monospace';
 
-/* The era whose LOOK is in force: during cool-off, preview the era
- * the next shift belongs to (matches the roof sign + shop gating). */
-function eraNow() {
-  return eraForShift(G.phase === 'cooloff' ? G.shiftIdx + 1 : Math.max(0, G.shiftIdx));
-}
+/* The era whose LOOK is in force — fixed per stage (era level select). */
+function eraNow() { return currentEra(); }
 
 function render() {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -21,10 +18,10 @@ function render() {
    * Uniform scale + translate; input.js inverts G.view for clicks. */
   const topFloor = topVisibleFloor();
   const worldTop = floorTopY(topFloor) - 40;               // roof sign headroom
-  const worldH = GROUND_Y + 10 - worldTop;
-  // Fit the BUILDING (x 24..880), not the full world: dead side
-  // margins are cropped so sprites read as big as possible.
-  const bldX = 24, bldW = 880 - bldX;
+  const worldH = GROUND_Y + 30 - worldTop;                 // + curb strip for era street props
+  // Fit the building plus a narrow curb on each side — enough for the
+  // parked era vehicle + a skyline sliver without shrinking sprites much.
+  const bldX = -100, bldW = 900 - bldX;
   const widthFit = canvas.width / bldW;
   const targetZoom = Math.min(widthFit, canvas.height / worldH);
   G.zoom += (targetZoom - G.zoom) * ZOOM_EASE;
@@ -34,8 +31,9 @@ function render() {
   G.view = { s, ox, oy };
   const era = eraNow();                                    // drives every era visual below
 
-  // Night sky + stars (screen space, full canvas)
-  ctx.fillStyle = PALETTE.night;
+  // Era night sky + stars (screen space, full canvas)
+  const bd = era.backdrop || {};
+  ctx.fillStyle = bd.sky || PALETTE.night;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = '#3a4a6a';
   const skyH = Math.max(1, worldTop * s + oy);
@@ -45,11 +43,15 @@ function render() {
 
   ctx.setTransform(s, 0, 0, s, ox, oy);                    // ---- world space ----
 
+  drawSkyline(bd, worldTop);
+  drawCrosser(bd, worldTop);
+
   // Street (overdraw sideways/down to cover canvas gutters at low zoom)
   ctx.fillStyle = '#161c2e';
   ctx.fillRect(-400, GROUND_Y, WORLD_W + 800, 400);
   ctx.fillStyle = '#242e48';
   ctx.fillRect(-400, GROUND_Y, WORLD_W + 800, 3);
+  drawStreetProp(bd);
 
   // Building shell — the exterior AGES with the era (brick -> concrete
   // -> glass -> holo), driven by ERAS[*].shell / roofStyle.
@@ -230,6 +232,138 @@ function render() {
   if (G.eraCard) drawEraCard(G.eraCard);
 
   ctx.textAlign = 'left';
+}
+
+/* ---------- Era backdrop: the city outside dates the stage ---------- */
+
+/* Distant skyline silhouette behind/left+right of the hospital.
+ * lowrise (1950s brick town) -> midrise -> highrise -> glass -> future. */
+function drawSkyline(bd, worldTop) {
+  const style = bd.skyline || 'lowrise';
+  ctx.fillStyle = 'rgba(13,22,38,0.9)';
+  const blocks = {
+    lowrise:  [[-320, 60, 90], [-190, 40, 70], [900, 50, 80], [1030, 34, 60], [1150, 46, 80]],
+    midrise:  [[-330, 120, 80], [-210, 90, 70], [-110, 140, 60], [900, 110, 70], [1000, 150, 60], [1090, 90, 80]],
+    highrise: [[-340, 220, 70], [-250, 170, 60], [-160, 260, 70], [900, 240, 66], [990, 180, 60], [1070, 280, 70]],
+    glass:    [[-340, 260, 70], [-250, 320, 62], [-160, 220, 70], [900, 300, 66], [990, 240, 60], [1070, 340, 70]],
+    future:   [[-330, 340, 56], [-250, 280, 44], [-180, 400, 50], [910, 380, 50], [990, 300, 44], [1060, 430, 56]],
+    y3k:      [[-330, 420, 46], [-260, 340, 36], [-190, 480, 42], [910, 460, 42], [980, 380, 36], [1050, 520, 48]],
+  }[style] || [];
+  for (const [x, h, w] of blocks) {
+    ctx.fillRect(x, GROUND_Y - h, w, h);
+    // lit windows
+    ctx.fillStyle = style === 'future' || style === 'y3k' ? 'rgba(120,220,255,0.35)' : 'rgba(230,200,120,0.28)';
+    for (let wy = GROUND_Y - h + 8; wy < GROUND_Y - 8; wy += 16) {
+      for (let wx = x + 6; wx < x + w - 6; wx += 14) {
+        if (((wx * 7 + wy * 13) | 0) % 3 === 0) ctx.fillRect(wx, wy, 4, 5);
+      }
+    }
+    if (style === 'y3k') {                       // floating tier
+      ctx.fillStyle = 'rgba(160,90,230,0.5)';
+      ctx.fillRect(x + 6, GROUND_Y - h - 18, w - 12, 8);
+    }
+    ctx.fillStyle = 'rgba(13,22,38,0.9)';
+  }
+}
+
+/* One animated sky-crosser per era: prop plane -> jet -> copter ->
+ * drone -> flying car -> UFO. Loops on a long period. */
+function drawCrosser(bd, worldTop) {
+  const kind = bd.crosser || 'plane';
+  const period = 26;                             // seconds per crossing
+  const f = ((G.time % period) / period);
+  const x = -80 + f * (WORLD_W + 200);
+  const y = worldTop - 60 + Math.sin(G.time * 0.8) * 4;
+  ctx.save();
+  if (kind === 'plane') {
+    ctx.fillStyle = '#9aa4b4';
+    ctx.fillRect(x, y, 26, 5);                    // fuselage
+    ctx.fillRect(x + 8, y - 5, 6, 5);             // tail
+    ctx.fillRect(x + 10, y + 4, 10, 3);           // wing
+    const spin = Math.floor(G.time * 12) % 2 === 0;
+    ctx.fillRect(x + 26, y + (spin ? -2 : 2), 2, 5); // prop blur
+  } else if (kind === 'jet') {
+    ctx.fillStyle = '#c8d0dc';
+    ctx.fillRect(x, y, 34, 5);
+    ctx.fillRect(x + 4, y - 5, 6, 5);
+    ctx.fillRect(x + 12, y + 4, 14, 3);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';     // contrail
+    ctx.fillRect(x - 40, y + 2, 38, 2);
+  } else if (kind === 'copter') {
+    ctx.fillStyle = '#8a94a4';
+    ctx.fillRect(x, y, 20, 7);
+    ctx.fillRect(x - 8, y + 2, 8, 3);
+    const spin = Math.floor(G.time * 16) % 2 === 0;
+    ctx.fillRect(x - 2 + (spin ? 0 : 4), y - 3, spin ? 24 : 16, 2);
+  } else if (kind === 'drone') {
+    ctx.fillStyle = '#5a6a7a';
+    ctx.fillRect(x, y, 12, 4);
+    const spin = Math.floor(G.time * 20) % 2 === 0;
+    ctx.fillRect(x - 4, y - 2, spin ? 6 : 4, 2);
+    ctx.fillRect(x + 10, y - 2, spin ? 6 : 4, 2);
+    ctx.fillStyle = PALETTE.red;
+    ctx.fillRect(x + 5, y + 4, 2, 2);             // payload light
+  } else if (kind === 'flyingcar') {
+    ctx.fillStyle = '#c86a3a';
+    ctx.fillRect(x, y, 22, 6);
+    ctx.fillStyle = '#8ad8f0';
+    ctx.fillRect(x + 4, y - 4, 10, 4);            // canopy
+    ctx.fillStyle = 'rgba(120,220,255,0.5)';
+    ctx.fillRect(x + 2, y + 6, 4, 3); ctx.fillRect(x + 16, y + 6, 4, 3); // thrusters
+  } else if (kind === 'ufo') {
+    const bob = Math.sin(G.time * 2.4) * 3;
+    ctx.fillStyle = '#9a8ae0';
+    ctx.fillRect(x, y + bob, 28, 5);
+    ctx.fillStyle = '#c8f0f8';
+    ctx.fillRect(x + 9, y - 4 + bob, 10, 4);      // dome
+    const blink = Math.floor(G.time * 4) % 3;
+    ctx.fillStyle = '#40e05a';
+    ctx.fillRect(x + 4 + blink * 8, y + 5 + bob, 3, 2);
+  }
+  ctx.restore();
+}
+
+/* Parked street prop by the entrance: era car -> EV -> hover gurney. */
+function drawStreetProp(bd) {
+  const kind = bd.street || 'oldcar';
+  const x = -110, y = GROUND_Y + 8;
+  if (kind === 'oldcar') {
+    // rounded 1950s ambulance-wagon
+    ctx.fillStyle = '#d8d8d0';
+    ctx.fillRect(x, y, 64, 16);
+    ctx.fillRect(x + 10, y - 10, 36, 10);
+    ctx.fillStyle = PALETTE.red;
+    ctx.fillRect(x + 24, y + 2, 10, 10);
+    ctx.fillStyle = PALETTE.white;
+    ctx.fillRect(x + 28, y + 3, 2, 8); ctx.fillRect(x + 25, y + 6, 8, 2);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(x + 8, y + 12, 10, 8); ctx.fillRect(x + 44, y + 12, 10, 8);
+  } else if (kind === 'sedan') {
+    ctx.fillStyle = '#7a2a2a';
+    ctx.fillRect(x, y + 2, 66, 12);
+    ctx.fillRect(x + 14, y - 6, 34, 8);
+    ctx.fillStyle = '#aad0e8';
+    ctx.fillRect(x + 18, y - 4, 12, 6); ctx.fillRect(x + 34, y - 4, 10, 6);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(x + 8, y + 12, 10, 8); ctx.fillRect(x + 46, y + 12, 10, 8);
+  } else if (kind === 'ev') {
+    ctx.fillStyle = '#e8e8ec';
+    ctx.fillRect(x, y + 2, 62, 12);
+    ctx.fillStyle = '#28303c';
+    ctx.fillRect(x + 10, y - 5, 42, 8);
+    ctx.fillStyle = '#40e05a';
+    ctx.fillRect(x + 54, y + 6, 6, 3);            // charge light
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(x + 8, y + 12, 10, 8); ctx.fillRect(x + 42, y + 12, 10, 8);
+  } else if (kind === 'hover') {
+    const bob = Math.sin(G.time * 3) * 2;
+    ctx.fillStyle = '#8a9ae0';
+    ctx.fillRect(x, y - 4 + bob, 58, 10);
+    ctx.fillStyle = '#c8f0f8';
+    ctx.fillRect(x + 8, y - 10 + bob, 20, 6);
+    ctx.fillStyle = 'rgba(120,220,255,0.5)';
+    ctx.fillRect(x + 6, y + 7 + bob, 8, 4); ctx.fillRect(x + 42, y + 7 + bob, 8, 4);
+  }
 }
 
 /* Roofline: parapet + era props. Every era keeps the red cross (it's
@@ -434,12 +568,12 @@ function drawPatientEntity(p) {
     ctx.globalAlpha = on ? 1 : 0.35;
     ctx.fillStyle = '#c8d8dc';
     ctx.fillRect(p.x - 14, p.y - 8, 28, 5);
-    drawPatientSprite(ctx, p.x, p.y - 6, 0, 'sick', p.typeKey, G.time, p.look);
+    drawPatientSprite(ctx, p.x, p.y - 6, 0, 'sick', p.typeKey, G.time, p.look, eraNow().people);
     ctx.globalAlpha = 1;
     return;
   }
   const mood = p.state === 'exiting' ? 'happy' : 'sick';
-  drawPatientSprite(ctx, p.x, p.y, G.time * 5 + p.bob, mood, p.typeKey, G.time + p.bob, p.look);
+  drawPatientSprite(ctx, p.x, p.y, G.time * 5 + p.bob, mood, p.typeKey, G.time + p.bob, p.look, eraNow().people);
   if (p.state === 'exiting') return;                       // cured: no bars, no germ
 
   // The ailment — the actual enemy — rides above the patient.

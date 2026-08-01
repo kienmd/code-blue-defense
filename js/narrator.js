@@ -3,10 +3,9 @@
  * player through the night. Nature-documentary gravitas, ER chaos.
  *
  * Voice policy (by design, not fallback): the browser's built-in
- * speechSynthesis with the natural en-US system voice as default,
- * pinned in localStorage; the topbar VOICE button cycles the best
- * few available voices so the player picks their favorite. Always-on
- * subtitles. An ElevenLabs TTS tier exists below as a disabled seam
+ * speechSynthesis, pinned to the best male en-GB voice available
+ * (see VOICE_PREFERENCE below — no picker). Always-on subtitles.
+ * An ElevenLabs TTS tier exists below as a disabled seam
  * (NARRATOR_TTS_ENABLED) — a possible future upgrade; no key is
  * wired anywhere.
  * ============================================================ */
@@ -25,8 +24,8 @@ const NARRATION = {
   firstTransfer:  "To intensive care, then. We did what we could. We shall do better.",
   firstBurnout:   "That one has, as the young people say, quite lost the plot. A break room might be prudent.",
   sporeOutbreak:  "Spores in the waiting room. How dreadfully Victorian. Isolate them, with haste.",
-  finalShift:     "The final shift. History will remember what you do next.",
-  win:            "All shifts complete. Simply magnificent. The board sends its regards.",
+  finalShift:     "The final wave. History will remember what you do next.",
+  win:            "Stage cleared. Simply magnificent. The board sends its regards.",
   lose:           "The intensive care unit is full. A sombre night. Even the finest hospitals have them.",
   // Era transitions — always spoken, one per era (keys match ERAS labels).
   'era_1950s':    "The nineteen-fifties. Paper charts, starched caps, and surgeons with remarkable confidence.",
@@ -67,9 +66,9 @@ function narratorReset() {
   narrator.queue.length = 0;
 }
 
-/* ---------- Public entry: narrate('lineId', { always }) ---------- */
+/* ---------- Public entry: narrate('lineId', { always, text }) ---------- */
 function narrate(id, opts = {}) {
-  const text = NARRATION[id];
+  const text = opts.text || NARRATION[id];   // opts.text: ad-hoc lines (tutorial steps)
   if (!text) return;
   if (!opts.always && narrator.said.has(id)) return;
   narrator.said.add(id);
@@ -146,57 +145,30 @@ function playClip(url) {
   });
 }
 
-/* Voice policy: default to the natural en-US system voice (the user
- * prefers it over the en-GB one), pinned in localStorage so it never
- * changes between sessions. A VOICE button in the topbar cycles
- * through the best few available system voices — the player picks
- * their favorite themselves. */
-const VOICE_PREFERENCE = [/^alex$/i, /^samantha/i, /^daniel/i, /^karen/i, /^moira/i, /us english/i, /uk english/i];
-
-function narratorVoiceCandidates() {
-  const voices = speechSynthesis.getVoices();
-  const en = voices.filter(v => (v.lang || '').replace('_', '-').startsWith('en'));
-  const picked = [];
-  for (const rx of VOICE_PREFERENCE) {
-    const v = en.find(v => rx.test(v.name) && !picked.includes(v));
-    if (v) picked.push(v);
-    if (picked.length >= 4) break;
-  }
-  for (const v of en) {                     // pad with whatever's around
-    if (picked.length >= 4) break;
-    if (!picked.includes(v)) picked.push(v);
-  }
-  return picked;
-}
+/* Voice policy: a distinguished BRITISH GENTLEMAN, fixed (no picker).
+ * Prefer the highest-quality male en-GB voice available: premium/
+ * enhanced variants first (macOS "Daniel (Enhanced)"), then Chrome's
+ * network "Google UK English Male", then plain Daniel/Arthur/Oliver,
+ * then any en-GB, then any English voice at all. */
+const VOICE_PREFERENCE = [
+  /daniel.*(enhanced|premium)/i,
+  /(enhanced|premium).*daniel/i,
+  /google uk english male/i,
+  /^daniel/i,
+  /^arthur/i,
+  /^oliver/i,
+  /uk english male/i,
+];
 
 function pickNarratorVoice() {
-  const candidates = narratorVoiceCandidates();
-  if (!candidates.length) return null;
-  let pinned = null;
-  try { pinned = localStorage.getItem('cbd_voice'); } catch (_) { /* ignore */ }
-  if (pinned) {
-    const v = speechSynthesis.getVoices().find(v => v.name === pinned);
+  const voices = speechSynthesis.getVoices();
+  const norm = v => (v.lang || '').replace('_', '-').toLowerCase();
+  const gb = voices.filter(v => norm(v).startsWith('en-gb'));
+  for (const rx of VOICE_PREFERENCE) {
+    const v = gb.find(v => rx.test(v.name)) || voices.find(v => rx.test(v.name));
     if (v) return v;
   }
-  const chosen = candidates[0];
-  try { localStorage.setItem('cbd_voice', chosen.name); } catch (_) { /* ignore */ }
-  return chosen;
-}
-
-/* Cycle to the next candidate voice; returns its display name. */
-function cycleNarratorVoice() {
-  const candidates = narratorVoiceCandidates();
-  if (!candidates.length) return null;
-  const cur = pickNarratorVoice();
-  const idx = Math.max(0, candidates.findIndex(v => cur && v.name === cur.name));
-  const next = candidates[(idx + 1) % candidates.length];
-  try { localStorage.setItem('cbd_voice', next.name); } catch (_) { /* ignore */ }
-  return next.name;
-}
-
-function narratorVoiceName() {
-  const v = pickNarratorVoice();
-  return v ? v.name.split(' ')[0].toUpperCase() : 'AUTO';
+  return gb[0] || voices.find(v => norm(v).startsWith('en')) || null;
 }
 
 // Voice lists load async in some browsers; warm the cache when they land.
@@ -210,8 +182,8 @@ function speakWithSynthesis(text) {
       const voice = pickNarratorVoice();
       const u = new SpeechSynthesisUtterance(text);
       if (voice) u.voice = voice;
-      u.rate = 0.95;
-      u.pitch = 0.85;                       // measured, unhurried
+      u.rate = 0.95;                        // unhurried
+      u.pitch = 0.92;                       // low-ish, but not droning
       u.onend = () => resolve(true);
       u.onerror = () => resolve(false);
       speechSynthesis.speak(u);
