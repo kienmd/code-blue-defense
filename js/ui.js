@@ -113,7 +113,146 @@ function refreshHud() {
   hudSet(el.waiting, 'waiting', `WAITING ${waiting}`);
 }
 
-/* ---------- Era level select (Angry Birds-style stage cards) ---------- */
+/* ---------- Era level select (Angry Birds-style stage cards) ----------
+ * Every stage card gets its OWN pixel-art vignette that reads as the
+ * decade at a glance — drawn procedurally (no image files), keyed by
+ * stage.id in STAGE_ART below. 84x56 canvas, game's 8-bit style. */
+const STAGE_ART = {
+  '1950s': (p, era) => {
+    // small brick hospital, big cross, rounded post-war ambulance
+    p.rect(8, 18, 46, 30, era.shell);                     // brick block
+    p.rect(8, 18, 46, 3, '#3a2018');
+    for (let y = 26; y < 46; y += 8) for (let x = 12; x < 50; x += 9) p.rect(x, y, 5, 5, '#2b2519');
+    p.rect(24, 8, 14, 12, PALETTE.red);                   // cross sign
+    p.rect(29, 10, 4, 8, PALETTE.white); p.rect(26, 12, 10, 4, PALETTE.white);
+    p.rect(20, 4, 3, 8, '#4a2c20');                       // chimney
+    p.rect(58, 38, 22, 8, '#d8d8d0');                     // old ambulance
+    p.rect(62, 33, 12, 5, '#d8d8d0');
+    p.rect(66, 40, 4, 4, PALETTE.red);
+    p.rect(60, 46, 4, 4, '#1a1a1a'); p.rect(72, 46, 4, 4, '#1a1a1a');
+    p.rect(0, 50, 84, 6, '#161c2e');                      // street
+  },
+  '1960s': (p, era) => {
+    // hospital + coronary-unit annex, ECG heartbeat trace across the sky
+    p.rect(10, 22, 30, 28, era.shell);
+    for (let y = 28, i = 0; y < 46; y += 8, i++) for (let x = 14; x < 36; x += 8) p.rect(x, y, 4, 4, '#243024');
+    p.rect(44, 30, 28, 20, '#6a4a34');                    // CCU annex
+    p.rect(50, 34, 16, 6, PALETTE.white);
+    p.rect(52, 35, 4, 4, PALETTE.red); p.rect(58, 35, 4, 4, PALETTE.red); // heart pair
+    p.rect(20, 12, 12, 10, PALETTE.red);
+    p.rect(24, 14, 4, 6, PALETTE.white); p.rect(22, 16, 8, 3, PALETTE.white);
+    // ECG trace
+    const ekg = [[2,8],[10,8],[14,4],[18,12],[22,8],[40,8],[44,3],[48,13],[52,8],[80,8]];
+    for (let i = 0; i < ekg.length - 1; i++) {
+      const [x1, y1] = ekg[i], [x2] = ekg[i + 1];
+      p.rect(x1, y1, Math.max(2, x2 - x1), 2, PALETTE.green);
+    }
+    p.rect(0, 50, 84, 6, '#161c2e');
+  },
+  '1970s-80s': (p) => {
+    // boxy paramedic ambulance with a red/blue lightbar, rolling out
+    p.rect(0, 44, 84, 12, '#242e48');                     // road
+    p.rect(4, 48, 12, 2, PALETTE.white); p.rect(28, 48, 12, 2, PALETTE.white); p.rect(52, 48, 12, 2, PALETTE.white);
+    p.rect(14, 20, 44, 22, PALETTE.white);                // box body
+    p.rect(14, 30, 44, 4, PALETTE.red);                   // belt stripe
+    p.rect(54, 24, 16, 18, '#e8e8e0');                    // cab
+    p.rect(58, 26, 8, 6, '#8ad8f0');                      // windshield
+    p.rect(20, 16, 10, 4, PALETTE.red); p.rect(32, 16, 10, 4, '#4aa3df'); // lightbar
+    p.rect(24, 24, 8, 8, PALETTE.red);                    // cross on box
+    p.rect(27, 25, 2, 6, PALETTE.white); p.rect(25, 27, 6, 2, PALETTE.white);
+    p.rect(20, 40, 8, 8, '#1a1a1a'); p.rect(58, 40, 8, 8, '#1a1a1a'); // wheels
+    p.rect(22, 42, 4, 4, '#66788e'); p.rect(60, 42, 4, 4, '#66788e');
+  },
+  '1990s': (p) => {
+    // virology bench: flasks of green culture, biohazard trefoil
+    p.rect(0, 44, 84, 12, '#20293e');                     // bench
+    p.rect(8, 26, 12, 18, '#c8d8dc');                     // flask A
+    p.rect(11, 20, 6, 8, '#c8d8dc');
+    p.rect(9, 34, 10, 9, '#58d858');                      // culture
+    p.rect(26, 30, 10, 14, '#c8d8dc');                    // flask B
+    p.rect(27, 36, 8, 7, '#9bd400');
+    p.rect(42, 22, 3, 22, '#c8d8dc');                     // test tube
+    p.rect(42, 32, 3, 12, '#ff5a5a');
+    // biohazard trefoil (simplified)
+    p.rect(58, 22, 16, 16, '#151a10');
+    p.rect(62, 24, 8, 3, PALETTE.amber); p.rect(60, 30, 4, 6, PALETTE.amber);
+    p.rect(68, 30, 4, 6, PALETTE.amber); p.rect(64, 29, 4, 4, '#151a10');
+    p.rect(12, 8, 60, 2, '#2a3a5c');                      // shelf line
+  },
+  '2000s': (p) => {
+    // the EHR desk: chunky monitor, chart on screen, keyboard, tower
+    p.rect(0, 46, 84, 10, '#20293e');                     // desk
+    p.rect(16, 10, 40, 30, '#8a94a4');                    // monitor shell
+    p.rect(20, 14, 32, 22, '#0c2818');                    // screen
+    p.rect(22, 16, 20, 2, '#9bd400');                     // chart lines
+    p.rect(22, 20, 26, 2, '#9bd400');
+    p.rect(22, 24, 14, 2, '#9bd400');
+    p.rect(22, 30, 10, 4, '#4aa3df');                     // OK button
+    p.rect(30, 40, 12, 6, '#8a94a4');                     // stand
+    p.rect(14, 48, 34, 4, '#66788e');                     // keyboard
+    p.rect(62, 26, 14, 24, '#4a5462');                    // PC tower
+    p.rect(65, 30, 8, 2, '#9bd400'); p.rect(65, 34, 8, 2, '#2a3a5c');
+  },
+  '2010s': (p) => {
+    // telehealth: a big smartphone, doctor on screen, signal waves
+    p.rect(28, 8, 28, 44, '#28303c');                     // phone
+    p.rect(31, 12, 22, 32, '#0a1428');                    // screen
+    p.rect(38, 18, 8, 6, '#e8b088');                      // doctor's face
+    p.rect(37, 24, 10, 8, '#3a7ac8');                     // scrubs
+    p.rect(36, 15, 12, 2, '#5a4632');                     // hair
+    p.rect(34, 36, 16, 4, '#58d858');                     // CONNECT bar
+    p.rect(39, 46, 6, 3, '#66788e');                      // home button
+    // signal arcs
+    p.rect(62, 22, 3, 3, '#4aa3df'); p.rect(66, 18, 3, 3, '#4aa3df'); p.rect(70, 14, 3, 3, '#4aa3df');
+    p.rect(18, 22, 3, 3, '#4aa3df'); p.rect(14, 18, 3, 3, '#4aa3df'); p.rect(10, 14, 3, 3, '#4aa3df');
+    p.rect(40, 4, 4, 2, PALETTE.red); p.rect(41, 3, 2, 4, PALETTE.red);  // cross notch
+  },
+  '2020s': (p) => {
+    // the AI decade: robot scribe beside a patient bed, neural glow
+    p.rect(0, 46, 84, 10, '#1e3038');
+    p.rect(8, 34, 30, 10, PALETTE.white);                 // bed
+    p.rect(8, 30, 8, 6, '#f2c8a8');                       // patient head
+    p.rect(10, 44, 4, 6, '#31405e'); p.rect(32, 44, 4, 6, '#31405e');
+    p.rect(52, 20, 16, 20, '#8a94a4');                    // robot body
+    p.rect(54, 12, 12, 8, '#c8d0dc');                     // robot head
+    p.rect(56, 14, 3, 3, '#9bd400'); p.rect(62, 14, 3, 3, '#9bd400'); // eyes
+    p.rect(58, 8, 2, 4, '#66788e'); p.rect(57, 6, 4, 2, PALETTE.red); // antenna
+    p.rect(48, 24, 4, 10, '#8a94a4');                     // arm to bedside
+    p.rect(55, 24, 10, 8, '#0c2818');                     // chest screen
+    p.rect(57, 26, 6, 1, '#9bd400'); p.rect(57, 29, 4, 1, '#9bd400');
+    p.rect(20, 8, 3, 3, '#9bd400'); p.rect(28, 4, 3, 3, '#9bd400'); p.rect(36, 10, 3, 3, '#9bd400'); // neural sparks
+  },
+  '2040s': (p, era) => {
+    // agentic era: glass tower, helipad, delivery drones
+    p.rect(26, 8, 32, 44, era.shell);                     // tower
+    for (let y = 14; y < 48; y += 7) p.rect(28, y, 28, 3, 'rgba(122,180,255,0.5)');
+    p.rect(24, 4, 20, 4, '#39445c');                      // helipad arm
+    p.rect(30, 2, 8, 2, PALETTE.white);
+    p.rect(38, 20, 8, 8, PALETTE.red);                    // cross
+    p.rect(41, 22, 2, 4, PALETTE.white); p.rect(39, 23, 6, 2, PALETTE.white);
+    // drones
+    p.rect(8, 14, 8, 3, '#5a6a7a'); p.rect(6, 12, 4, 2, '#8a94a4'); p.rect(14, 12, 4, 2, '#8a94a4');
+    p.rect(64, 26, 8, 3, '#5a6a7a'); p.rect(62, 24, 4, 2, '#8a94a4'); p.rect(70, 24, 4, 2, '#8a94a4');
+    p.rect(11, 17, 2, 2, PALETTE.red); p.rect(67, 29, 2, 2, PALETTE.red); // payloads
+    p.rect(0, 52, 84, 4, '#161c2e');
+  },
+  'Y3K': (p) => {
+    // floating neon hospital, tractor beam, starfield
+    for (let i = 0; i < 12; i++) p.rect((i * 29 + 7) % 84, (i * 13 + 3) % 30, 2, 2, '#3a4a6a');
+    p.rect(22, 14, 40, 16, '#2a1650');                    // floating hull
+    p.rect(18, 18, 48, 6, '#3c2a6e');
+    p.rect(38, 6, 8, 8, '#c858e8');                       // holo cross halo
+    p.rect(41, 8, 2, 4, PALETTE.white); p.rect(39, 9, 6, 2, PALETTE.white);
+    p.rect(26, 20, 4, 3, '#66e0ff'); p.rect(34, 20, 4, 3, '#66e0ff');
+    p.rect(46, 20, 4, 3, '#66e0ff'); p.rect(54, 20, 4, 3, '#66e0ff');   // portholes
+    // tractor beam down to a tiny gurney
+    p.rect(38, 30, 8, 14, 'rgba(102,224,255,0.35)');
+    p.rect(34, 44, 16, 4, 'rgba(102,224,255,0.2)');
+    p.rect(38, 46, 8, 3, '#8a9ae0');                      // hover gurney
+    p.rect(0, 52, 84, 4, '#0d1626');                      // dark future ground
+  },
+};
+
 function stageThumb(stage) {
   const era = ERAS[stage.eraIdx];
   const c = document.createElement('canvas');
@@ -122,17 +261,8 @@ function stageThumb(stage) {
   tctx.imageSmoothingEnabled = false;
   tctx.fillStyle = (era.backdrop && era.backdrop.sky) || '#0a1a2f';
   tctx.fillRect(0, 0, 84, 56);
-  // tiny era skyline + hospital block
-  tctx.fillStyle = '#0d1626';
-  tctx.fillRect(4, 30, 12, 26); tctx.fillRect(62, 22, 16, 34);
-  tctx.fillStyle = era.shell || '#5a4632';
-  tctx.fillRect(24, 18, 36, 38);
-  tctx.fillStyle = era.wall || '#233046';
-  for (let y = 24; y < 52; y += 8) for (let x = 28; x < 56; x += 8) tctx.fillRect(x, y, 5, 5);
-  tctx.fillStyle = PALETTE.red;
-  tctx.fillRect(38, 8, 8, 8);
-  tctx.fillStyle = PALETTE.white;
-  tctx.fillRect(41, 9, 2, 6); tctx.fillRect(39, 11, 6, 2);
+  const p = { rect(x, y, w, h, col) { tctx.fillStyle = col; tctx.fillRect(x, y, w, h); } };
+  (STAGE_ART[stage.id] || STAGE_ART['1950s'])(p, era);
   return c;
 }
 

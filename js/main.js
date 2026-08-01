@@ -13,6 +13,8 @@ function launchStage(stage, withTutorial) {
   G.sfx('buy');
   stopMusic();
   setPregame(false);
+  el.stageIntro.classList.add('hidden');
+  el.menu.classList.add('hidden');
   startRun(stage);
   if (withTutorial || (stage === STAGES[0] && !storage.get('cbd_tutorial_done'))) {
     startTutorial();

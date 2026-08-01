@@ -67,12 +67,6 @@ const TUTORIAL_STEPS = [
     done: () => lobbyStaff().length > 0,
   },
   {
-    text: 'HIRE A DOCTOR, THEN CLICK YOUR WARD TO STATION HIM THERE.<br/>DOCTORS TREAT FAST — AND DIAGNOSE EVEN FASTER.',
-    narr: 'Now a doctor for the ward. The expensive kind of useful.',
-    target: () => domRect(shopButtons.staff.doctor),
-    done: () => G.staffList.some(s => s.typeKey === 'doctor' && s.room instanceof Room),
-  },
-  {
     text: 'READY? START THE WAVE.<br/>NO ONE ARRIVES UNTIL YOU DO — BUILD AT YOUR OWN PACE.',
     narr: 'When ready, start the wave. They will come.',
     target: () => domRect(el.btnShift),
@@ -89,16 +83,41 @@ const TUTORIAL_STEPS = [
     waitFor: () => G.patients.length > 0,
   },
   {
-    text: 'DIAGNOSED! NOW CLICK THE PATIENT, THEN CLICK THE WARD.<br/>RIGHT ROOM = FULL SPEED + FULL REIMBURSEMENT.',
+    // CORE MANUAL ACTION 1 — patient -> room allocation. Gated on the
+    // player actually bedding a patient (auto-assign is suppressed
+    // while the tutorial runs, so this cannot happen by itself).
+    text: 'DIAGNOSED! NOW CLICK THE PATIENT, THEN CLICK THE WARD.<br/>THE PATIENT GETS A BED — RIGHT ROOM = FULL SPEED + FULL PAY.',
     narr: 'Diagnosed. Click the patient, then the ward. A bed awaits.',
     target: () => {
       const p = waitingPatients().find(q => q.diagnosed) || waitingPatients()[0];
-      return p ? worldRect(p.x - 20, p.y - 50, 40, 60) : null;
+      if (p && !G.selection) return worldRect(p.x - 20, p.y - 50, 40, 60);
+      const room = G.rooms.find(r => !r.def.support);
+      return room ? worldRect(room.x, room.y, room.w, room.h) : null;
     },
     done: () => G.patients.some(p => p.room),
   },
   {
-    text: 'TREATMENT UNDERWAY — THE ORANGE BAR IS THE SICKNESS. WHEN IT EMPTIES, THEY WALK OUT SMILING (AND THE HOSPITAL GETS PAID).',
+    // CORE MANUAL ACTION 2a — staff the bedside: hire a second nurse.
+    text: 'IN BED — BUT NOBODY IS TREATING THEM YET.<br/>HIRE ANOTHER NURSE FOR THE WARD.',
+    narr: 'A bed without a nurse is just furniture. Hire another.',
+    target: () => domRect(shopButtons.staff.nurse),
+    done: () => G.staffList.filter(s => s.typeKey === 'nurse').length >= 2,
+  },
+  {
+    // CORE MANUAL ACTION 2b — nurse -> room allocation. Gated on the
+    // patient's room actually having staff so treatment truly starts.
+    text: 'NOW CLICK THE NEW NURSE, THEN CLICK THE WARD WITH YOUR PATIENT.<br/>TREATMENT STARTS WHEN STAFF ARE AT THE BEDSIDE.',
+    narr: 'Click the nurse, then the ward. Medicine needs hands.',
+    target: () => {
+      const nurse = G.staffList.find(s => s.typeKey === 'nurse' && !(s.room instanceof Room) && s.room !== 'lobby');
+      if (nurse && !G.selection) return worldRect(nurse.x - 18, nurse.y - 44, 36, 54);
+      const room = G.rooms.find(r => r.beds && r.beds.some(Boolean));
+      return room ? worldRect(room.x, room.y, room.w, room.h) : null;
+    },
+    done: () => G.rooms.some(r => r.beds && r.beds.some(Boolean) && r.staff.length > 0),
+  },
+  {
+    text: 'TREATMENT UNDERWAY — THE BLUE BAR IS THE SICKNESS DRAINING. WHEN IT EMPTIES, THEY WALK OUT SMILING (AND THE HOSPITAL GETS PAID).',
     narr: 'Now medicine does its work. Watch the sickness bar fall.',
     target: () => {
       const p = G.patients.find(q => q.room);
@@ -107,12 +126,17 @@ const TUTORIAL_STEPS = [
     done: () => G.discharged > 0,
   },
   {
-    text: 'CURED! CLEAR EVERY WAVE TO FINISH THE STAGE.<br/>EACH ERA CARD ON THE MENU IS A NEW DECADE: NEW TECH, NEW DISEASES, NEW HOSPITAL. GOOD LUCK OUT THERE.',
-    narr: 'Cured. The decades ahead bring wonders. Carry on.',
+    text: 'CURED! YOUR FIRST DISCHARGE — THE HOSPITAL GETS PAID.<br/>CLEAR EVERY WAVE TO FINISH THE STAGE. EACH ERA CARD ON THE MENU IS A NEW DECADE: NEW TECH, NEW DISEASES, NEW HOSPITAL. GOOD LUCK OUT THERE.',
+    narr: 'Cured, and walking out smiling. The decades ahead bring wonders. Carry on.',
     target: () => null,
     manual: true,
   },
 ];
+
+/* While the tutorial runs, nothing may allocate FOR the player — the
+ * two core manual actions (patient -> room, nurse -> room) must be
+ * performed by hand. sim.updateAutoAssign checks this. */
+function tutorialBlocksAutoAssign() { return tut.active; }
 
 function startTutorial() {
   tut.active = true;

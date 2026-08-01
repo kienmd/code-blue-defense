@@ -560,6 +560,8 @@ function updateContagion(dt) {
 function updateAutoAssign(dt) {
   // Lab-Router purchase, or free from the 2050s era baseline on.
   if (!G.upgrades.labRouter && !currentEra().autoAssign) return;
+  // The tutorial teaches MANUAL allocation — no AI while it runs.
+  if (typeof tutorialBlocksAutoAssign === 'function' && tutorialBlocksAutoAssign()) return;
   G.autoAssignTimer -= dt;
   if (G.autoAssignTimer > 0) return;
   G.autoAssignTimer = AUTO_ASSIGN_PERIOD;
