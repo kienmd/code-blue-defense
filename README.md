@@ -1,17 +1,26 @@
 # Code Blue Defense: Ward Shift
 
-An 8-bit hospital-management game built for a healthcare AI hackathon.
-Fallout Shelter-style cross-section: **patients are the "creeps," pathogens
-are the enemies**. Build rooms, hire staff, diagnose the ailment, allocate
-the bed — and cure everyone before the disease wins. Across thirteen shifts
-the hospital marches from the **1950s to the year 3000**, and in the late
-decades the **agentic AI upgrades** arrive to multiply your humans.
+### ▶ [PLAY IT NOW](https://kienmd.github.io/code-blue-defense/) — no install, right in your browser
+
+An 8-bit hospital-management game where **the pathogens are the enemies and
+every patient walks out smiling** (you hope). Build the ward Fallout
+Shelter-style, post a nurse to triage, diagnose the ailment, allocate the
+bed — and cure everyone before the disease wins. Thirteen shifts march the
+hospital from the **1950s to the year 3000**: every decade upgrades the
+standard of care, re-skins the building, and eventually hands you **agentic
+AI upgrades** that multiply your human staff. A guided tutorial walks you
+through your first shift.
+
+![Ward Shift mid-game: a cure celebration in the General Ward while the waiting room triages](screenshot.png)
 
 Zero dependencies, zero build step: vanilla HTML5 Canvas + JavaScript.
 
-## Run it
+## Run it locally
 
 ```bash
+git clone https://github.com/kienmd/code-blue-defense.git
+cd code-blue-defense
+
 # option 1: just open it
 open index.html
 
@@ -52,9 +61,6 @@ every cool-off is a real resourcing decision:
 - **Walk-in copays** — a small floor faucet; a shift never grosses $0.
 - **Era modernization grants** — at each era-up, scaled UP the worse you're
   doing (Hill-Burton / HITECH flavor): a gentle catch-up rail.
-- **Private-wing contract** — opt-in per shift: payouts x1.3, but every ICU
-  transfer costs a settlement. The only place lives ever cost money, and
-  you chose it.
 - **Drains** — per-shift salaries and 2% room upkeep, settled at shift end.
   Shortfalls never block you: they carry as ACCOUNTS PAYABLE (soft debt).
   If you're ever stranded below one hire, a county bailout tops you up —
@@ -116,6 +122,7 @@ js/levels.js      13-shift arrival schedule
 js/entities.js    Patient/Staff/Room classes + pixel sprite painters
 js/audio.js       WebAudio chiptune synth + theme + SFX
 js/narrator.js    speechSynthesis narrator + script table + subtitles
+js/tutorial.js    first-run guided tutorial (spotlight engine + step table)
 js/state.js       the mutable game state G + query helpers
 js/ui.js          DOM/HUD/shop/report/era-report/inspector
 js/sim.js         run lifecycle, shift engine, treatment, economy settle
@@ -130,11 +137,11 @@ DESIGN.md         design ideation history + decision log
 
 ## Audio & narration
 
-The narrator speaks through the browser's built-in **speechSynthesis**
-(default: a natural en-US system voice, pinned in `localStorage`), with
-**always-on subtitles**. The **VOICE** button in the topbar cycles through
-your system's best few voices; SND ON/OFF mutes everything. The chiptune
-theme ducks while he speaks. `js/narrator.js` carries a disabled
+The game is narrated by a distinguished British gentleman through the
+browser's built-in **speechSynthesis** — the best available male en-GB
+voice is picked automatically (enhanced/premium variants preferred), with
+**always-on subtitles**. The chiptune theme ducks while he speaks; the
+SND ON/OFF toggle mutes everything. `js/narrator.js` carries a disabled
 ElevenLabs TTS seam as a possible future upgrade — nothing is wired to it.
 
 The only optional key is Anthropic, for live-LLM triage decisions and
