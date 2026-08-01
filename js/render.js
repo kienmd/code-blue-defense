@@ -52,6 +52,7 @@ function render() {
   ctx.fillStyle = '#242e48';
   ctx.fillRect(-400, GROUND_Y, WORLD_W + 800, 3);
   drawStreetProp(bd);
+  if (G.ambulance) drawAmbulance(bd);
 
   // Building shell — the exterior AGES with the era (brick -> concrete
   // -> glass -> holo), driven by ERAS[*].shell / roofStyle.
@@ -323,6 +324,62 @@ function drawCrosser(bd, worldTop) {
   ctx.restore();
 }
 
+/* FLAVOR EVENT: an ambulance pulls up, delivers a patient, drives off.
+ * Era-dressed: rounded wagon in the early days, boxy lightbar rig in
+ * the modern eras, hover rig in the far future (keyed off bd.street). */
+function drawAmbulance(bd) {
+  const a = G.ambulance;
+  const y = GROUND_Y + 6;
+  // motion: drive in (0..1.5s), hold with doors open, reverse out (2.6s+)
+  // stops just left of the ER door (view fits world x >= -100)
+  const stopX = -42;
+  let x;
+  if (a.t < 1.5) x = -420 + (a.t / 1.5) * (stopX + 420);
+  else if (a.t < 2.6) x = stopX;
+  else x = stopX - (a.t - 2.6) * 220;
+
+  const hover = (bd.street === 'hover');
+  const bob = hover ? Math.sin(G.time * 3) * 2 : 0;
+  ctx.save();
+  ctx.translate(x, y + bob);
+  if (hover) {
+    ctx.fillStyle = '#c8d0e8';
+    ctx.fillRect(0, -8, 62, 14);
+    ctx.fillStyle = 'rgba(120,220,255,0.5)';
+    ctx.fillRect(6, 7, 10, 4); ctx.fillRect(46, 7, 10, 4);   // thrusters
+  } else if (bd.street === 'oldcar') {
+    // rounded mid-century wagon
+    ctx.fillStyle = '#e8e8e0';
+    ctx.fillRect(0, -4, 64, 16);
+    ctx.fillRect(10, -14, 38, 10);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(8, 10, 10, 8); ctx.fillRect(44, 10, 10, 8);
+  } else {
+    // boxy paramedic rig
+    ctx.fillStyle = PALETTE.white;
+    ctx.fillRect(0, -14, 46, 26);
+    ctx.fillStyle = PALETTE.red;
+    ctx.fillRect(0, -3, 46, 4);                              // belt stripe
+    ctx.fillStyle = '#e8e8e0';
+    ctx.fillRect(46, -8, 16, 20);                            // cab
+    ctx.fillStyle = '#8ad8f0';
+    ctx.fillRect(49, -6, 9, 7);                              // windshield
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(6, 10, 9, 8); ctx.fillRect(48, 10, 9, 8);
+  }
+  // red cross + flashing lights on every variant
+  ctx.fillStyle = PALETTE.red;
+  ctx.fillRect(20, hover ? -6 : -12, 10, 10);
+  ctx.fillStyle = PALETTE.white;
+  ctx.fillRect(24, hover ? -4 : -10, 2, 6); ctx.fillRect(21, hover ? -2 : -8, 8, 2);
+  const flash = Math.floor(G.time * 6) % 2 === 0;
+  ctx.fillStyle = flash ? PALETTE.red : '#4aa3df';
+  ctx.fillRect(hover ? 26 : 14, hover ? -12 : -18, 6, 3);
+  ctx.fillStyle = flash ? '#4aa3df' : PALETTE.red;
+  ctx.fillRect(hover ? 34 : 24, hover ? -12 : -18, 6, 3);
+  ctx.restore();
+}
+
 /* Parked street prop by the entrance: era car -> EV -> hover gurney. */
 function drawStreetProp(bd) {
   const kind = bd.street || 'oldcar';
@@ -576,6 +633,14 @@ function drawPatientEntity(p) {
   drawPatientSprite(ctx, p.x, p.y, G.time * 5 + p.bob, mood, p.typeKey, G.time + p.bob, p.look, eraNow().people);
   if (p.state === 'exiting') return;                       // cured: no bars, no germ
 
+  // FLAVOR: the screaming sprinter gets a big flashing '!'
+  if (p.screamUntil && G.time < p.screamUntil) {
+    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.fillStyle = Math.floor(G.time * 8) % 2 === 0 ? PALETTE.red : PALETTE.amber;
+    ctx.fillText('!', p.x + 10, p.y - 38);
+    ctx.font = FONT;
+  }
+
   // The ailment — the actual enemy — rides above the patient.
   drawAilment(ctx, p.diagnosed ? p.typeKey : null, p.x, p.y - 32, p.ailmentScale(), G.time + p.bob);
 
@@ -610,7 +675,7 @@ function drawStaffEntity(s) {
   const burned = s.isBurnedOut(G.time);
   ctx.globalAlpha = burned ? 0.45 : 1;
   // era outfit: scrub palette marches through the decades
-  drawStaffSprite(ctx, s.typeKey, s.x, s.y, s.state === 'walking' ? G.time * 9 : 0, eraNow().scrub);
+  drawStaffSprite(ctx, s.typeKey, s.x, s.y, s.state === 'walking' ? G.time * 9 : 0, eraNow().scrub, s.look);
   ctx.globalAlpha = 1;
   if (burned) {
     ctx.font = FONT;

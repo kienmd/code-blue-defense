@@ -259,7 +259,7 @@ const BUILD_ESCALATION = 1.5;         // Nth copy of a room type: cost x1.5^(N-1
 // NOTE: ECONOMY.md's private-wing risk lever AND the era-up modernization
 // grant were CUT in implementation (user calls: wing removed outright; the
 // grant died with the per-stage pivot — each stage now sets its own budget).
-const BAILOUT_FLOOR = 16000;          // county bailout: 1 nurse hire + 1 shift of her salary
+const BAILOUT_FLOOR = 16000;          // county bailout: 1 nurse hire + 1 shift of their salary
 const BAILOUT_TRIGGER = 6000;         // bail out when budget < cheapest hire (orderly), x inflation
 
 /* ---------- Staff staging / lobby posts (world px) ----------

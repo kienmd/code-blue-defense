@@ -35,6 +35,8 @@ const el = {
   reportHand: document.getElementById('report-hand'),
   btnNextShift: document.getElementById('btn-next-shift'),
   btnKeepBuilding: document.getElementById('btn-keep-building'),
+  btnReportMenu: document.getElementById('btn-report-menu'),
+  btnQuit: document.getElementById('btn-quit'),
   stageIntro: document.getElementById('stage-intro'),
   introEraTitle: document.getElementById('intro-era-title'),
   introEraSub: document.getElementById('intro-era-sub'),
@@ -118,97 +120,40 @@ function refreshHud() {
  * decade at a glance — drawn procedurally (no image files), keyed by
  * stage.id in STAGE_ART below. 84x56 canvas, game's 8-bit style. */
 const STAGE_ART = {
-  '1950s': (p, era) => {
-    // small brick hospital, big cross, rounded post-war ambulance
-    p.rect(8, 18, 46, 30, era.shell);                     // brick block
-    p.rect(8, 18, 46, 3, '#3a2018');
-    for (let y = 26; y < 46; y += 8) for (let x = 12; x < 50; x += 9) p.rect(x, y, 5, 5, '#2b2519');
-    p.rect(24, 8, 14, 12, PALETTE.red);                   // cross sign
-    p.rect(29, 10, 4, 8, PALETTE.white); p.rect(26, 12, 10, 4, PALETTE.white);
-    p.rect(20, 4, 3, 8, '#4a2c20');                       // chimney
-    p.rect(58, 38, 22, 8, '#d8d8d0');                     // old ambulance
-    p.rect(62, 33, 12, 5, '#d8d8d0');
-    p.rect(66, 40, 4, 4, PALETTE.red);
-    p.rect(60, 46, 4, 4, '#1a1a1a'); p.rect(72, 46, 4, 4, '#1a1a1a');
-    p.rect(0, 50, 84, 6, '#161c2e');                      // street
+  '19XX': (p, era) => {
+    // 20th-century sweep: brick hospital + cross, boxy paramedic
+    // ambulance with a lightbar pulling up out front
+    p.rect(6, 14, 40, 32, era.shell);                     // brick block
+    p.rect(6, 14, 40, 3, '#3a2018');
+    for (let y = 22, i = 0; y < 42; y += 8) for (let x = 10; x < 42; x += 9) p.rect(x, y, 5, 5, '#2b2519');
+    p.rect(20, 4, 12, 10, PALETTE.red);                   // cross sign
+    p.rect(24, 6, 4, 6, PALETTE.white); p.rect(22, 7, 8, 3, PALETTE.white);
+    p.rect(50, 30, 24, 12, PALETTE.white);                // ambulance box
+    p.rect(50, 36, 24, 3, PALETTE.red);
+    p.rect(70, 32, 10, 10, '#e8e8e0');                    // cab
+    p.rect(72, 34, 6, 4, '#8ad8f0');
+    p.rect(54, 27, 6, 3, PALETTE.red); p.rect(61, 27, 6, 3, '#4aa3df'); // lightbar
+    p.rect(53, 40, 6, 6, '#1a1a1a'); p.rect(70, 40, 6, 6, '#1a1a1a');
+    p.rect(0, 46, 84, 10, '#242e48');                     // road
+    p.rect(4, 50, 10, 2, PALETTE.white); p.rect(30, 50, 10, 2, PALETTE.white); p.rect(56, 50, 10, 2, PALETTE.white);
   },
-  '1960s': (p, era) => {
-    // hospital + coronary-unit annex, ECG heartbeat trace across the sky
-    p.rect(10, 22, 30, 28, era.shell);
-    for (let y = 28, i = 0; y < 46; y += 8, i++) for (let x = 14; x < 36; x += 8) p.rect(x, y, 4, 4, '#243024');
-    p.rect(44, 30, 28, 20, '#6a4a34');                    // CCU annex
-    p.rect(50, 34, 16, 6, PALETTE.white);
-    p.rect(52, 35, 4, 4, PALETTE.red); p.rect(58, 35, 4, 4, PALETTE.red); // heart pair
-    p.rect(20, 12, 12, 10, PALETTE.red);
-    p.rect(24, 14, 4, 6, PALETTE.white); p.rect(22, 16, 8, 3, PALETTE.white);
-    // ECG trace
-    const ekg = [[2,8],[10,8],[14,4],[18,12],[22,8],[40,8],[44,3],[48,13],[52,8],[80,8]];
-    for (let i = 0; i < ekg.length - 1; i++) {
-      const [x1, y1] = ekg[i], [x2] = ekg[i + 1];
-      p.rect(x1, y1, Math.max(2, x2 - x1), 2, PALETTE.green);
-    }
-    p.rect(0, 50, 84, 6, '#161c2e');
-  },
-  '1970s-80s': (p) => {
-    // boxy paramedic ambulance with a red/blue lightbar, rolling out
-    p.rect(0, 44, 84, 12, '#242e48');                     // road
-    p.rect(4, 48, 12, 2, PALETTE.white); p.rect(28, 48, 12, 2, PALETTE.white); p.rect(52, 48, 12, 2, PALETTE.white);
-    p.rect(14, 20, 44, 22, PALETTE.white);                // box body
-    p.rect(14, 30, 44, 4, PALETTE.red);                   // belt stripe
-    p.rect(54, 24, 16, 18, '#e8e8e0');                    // cab
-    p.rect(58, 26, 8, 6, '#8ad8f0');                      // windshield
-    p.rect(20, 16, 10, 4, PALETTE.red); p.rect(32, 16, 10, 4, '#4aa3df'); // lightbar
-    p.rect(24, 24, 8, 8, PALETTE.red);                    // cross on box
-    p.rect(27, 25, 2, 6, PALETTE.white); p.rect(25, 27, 6, 2, PALETTE.white);
-    p.rect(20, 40, 8, 8, '#1a1a1a'); p.rect(58, 40, 8, 8, '#1a1a1a'); // wheels
-    p.rect(22, 42, 4, 4, '#66788e'); p.rect(60, 42, 4, 4, '#66788e');
-  },
-  '1990s': (p) => {
-    // virology bench: flasks of green culture, biohazard trefoil
-    p.rect(0, 44, 84, 12, '#20293e');                     // bench
-    p.rect(8, 26, 12, 18, '#c8d8dc');                     // flask A
-    p.rect(11, 20, 6, 8, '#c8d8dc');
-    p.rect(9, 34, 10, 9, '#58d858');                      // culture
-    p.rect(26, 30, 10, 14, '#c8d8dc');                    // flask B
-    p.rect(27, 36, 8, 7, '#9bd400');
-    p.rect(42, 22, 3, 22, '#c8d8dc');                     // test tube
-    p.rect(42, 32, 3, 12, '#ff5a5a');
-    // biohazard trefoil (simplified)
-    p.rect(58, 22, 16, 16, '#151a10');
-    p.rect(62, 24, 8, 3, PALETTE.amber); p.rect(60, 30, 4, 6, PALETTE.amber);
-    p.rect(68, 30, 4, 6, PALETTE.amber); p.rect(64, 29, 4, 4, '#151a10');
-    p.rect(12, 8, 60, 2, '#2a3a5c');                      // shelf line
-  },
-  '2000s': (p) => {
-    // the EHR desk: chunky monitor, chart on screen, keyboard, tower
+  '2XXX': (p) => {
+    // digital era: EHR monitor + smartphone, signal arcs
     p.rect(0, 46, 84, 10, '#20293e');                     // desk
-    p.rect(16, 10, 40, 30, '#8a94a4');                    // monitor shell
-    p.rect(20, 14, 32, 22, '#0c2818');                    // screen
-    p.rect(22, 16, 20, 2, '#9bd400');                     // chart lines
-    p.rect(22, 20, 26, 2, '#9bd400');
-    p.rect(22, 24, 14, 2, '#9bd400');
-    p.rect(22, 30, 10, 4, '#4aa3df');                     // OK button
-    p.rect(30, 40, 12, 6, '#8a94a4');                     // stand
-    p.rect(14, 48, 34, 4, '#66788e');                     // keyboard
-    p.rect(62, 26, 14, 24, '#4a5462');                    // PC tower
-    p.rect(65, 30, 8, 2, '#9bd400'); p.rect(65, 34, 8, 2, '#2a3a5c');
+    p.rect(8, 12, 36, 28, '#8a94a4');                     // monitor
+    p.rect(12, 16, 28, 20, '#0c2818');
+    p.rect(14, 18, 18, 2, '#9bd400'); p.rect(14, 22, 24, 2, '#9bd400');
+    p.rect(14, 26, 12, 2, '#9bd400'); p.rect(14, 31, 9, 3, '#4aa3df');
+    p.rect(22, 40, 10, 6, '#8a94a4');                     // stand
+    p.rect(54, 14, 20, 34, '#28303c');                    // smartphone
+    p.rect(57, 18, 14, 24, '#0a1428');
+    p.rect(61, 22, 6, 5, '#e8b088');                      // telehealth face
+    p.rect(60, 27, 8, 6, '#3a7ac8');
+    p.rect(59, 36, 10, 3, '#58d858');
+    p.rect(48, 8, 3, 3, '#4aa3df'); p.rect(52, 4, 3, 3, '#4aa3df'); p.rect(56, 1, 3, 3, '#4aa3df'); // signal
   },
-  '2010s': (p) => {
-    // telehealth: a big smartphone, doctor on screen, signal waves
-    p.rect(28, 8, 28, 44, '#28303c');                     // phone
-    p.rect(31, 12, 22, 32, '#0a1428');                    // screen
-    p.rect(38, 18, 8, 6, '#e8b088');                      // doctor's face
-    p.rect(37, 24, 10, 8, '#3a7ac8');                     // scrubs
-    p.rect(36, 15, 12, 2, '#5a4632');                     // hair
-    p.rect(34, 36, 16, 4, '#58d858');                     // CONNECT bar
-    p.rect(39, 46, 6, 3, '#66788e');                      // home button
-    // signal arcs
-    p.rect(62, 22, 3, 3, '#4aa3df'); p.rect(66, 18, 3, 3, '#4aa3df'); p.rect(70, 14, 3, 3, '#4aa3df');
-    p.rect(18, 22, 3, 3, '#4aa3df'); p.rect(14, 18, 3, 3, '#4aa3df'); p.rect(10, 14, 3, 3, '#4aa3df');
-    p.rect(40, 4, 4, 2, PALETTE.red); p.rect(41, 3, 2, 4, PALETTE.red);  // cross notch
-  },
-  '2020s': (p) => {
-    // the AI decade: robot scribe beside a patient bed, neural glow
+  '2026': (p) => {
+    // today: AI robot scribe beside a patient bed, neural sparks
     p.rect(0, 46, 84, 10, '#1e3038');
     p.rect(8, 34, 30, 10, PALETTE.white);                 // bed
     p.rect(8, 30, 8, 6, '#f2c8a8');                       // patient head
@@ -222,22 +167,8 @@ const STAGE_ART = {
     p.rect(57, 26, 6, 1, '#9bd400'); p.rect(57, 29, 4, 1, '#9bd400');
     p.rect(20, 8, 3, 3, '#9bd400'); p.rect(28, 4, 3, 3, '#9bd400'); p.rect(36, 10, 3, 3, '#9bd400'); // neural sparks
   },
-  '2040s': (p, era) => {
-    // agentic era: glass tower, helipad, delivery drones
-    p.rect(26, 8, 32, 44, era.shell);                     // tower
-    for (let y = 14; y < 48; y += 7) p.rect(28, y, 28, 3, 'rgba(122,180,255,0.5)');
-    p.rect(24, 4, 20, 4, '#39445c');                      // helipad arm
-    p.rect(30, 2, 8, 2, PALETTE.white);
-    p.rect(38, 20, 8, 8, PALETTE.red);                    // cross
-    p.rect(41, 22, 2, 4, PALETTE.white); p.rect(39, 23, 6, 2, PALETTE.white);
-    // drones
-    p.rect(8, 14, 8, 3, '#5a6a7a'); p.rect(6, 12, 4, 2, '#8a94a4'); p.rect(14, 12, 4, 2, '#8a94a4');
-    p.rect(64, 26, 8, 3, '#5a6a7a'); p.rect(62, 24, 4, 2, '#8a94a4'); p.rect(70, 24, 4, 2, '#8a94a4');
-    p.rect(11, 17, 2, 2, PALETTE.red); p.rect(67, 29, 2, 2, PALETTE.red); // payloads
-    p.rect(0, 52, 84, 4, '#161c2e');
-  },
-  'Y3K': (p) => {
-    // floating neon hospital, tractor beam, starfield
+  'Y26': (p) => {
+    // far-future bonus: floating neon hospital, tractor beam, stars
     for (let i = 0; i < 12; i++) p.rect((i * 29 + 7) % 84, (i * 13 + 3) % 30, 2, 2, '#3a4a6a');
     p.rect(22, 14, 40, 16, '#2a1650');                    // floating hull
     p.rect(18, 18, 48, 6, '#3c2a6e');
@@ -262,7 +193,7 @@ function stageThumb(stage) {
   tctx.fillStyle = (era.backdrop && era.backdrop.sky) || '#0a1a2f';
   tctx.fillRect(0, 0, 84, 56);
   const p = { rect(x, y, w, h, col) { tctx.fillStyle = col; tctx.fillRect(x, y, w, h); } };
-  (STAGE_ART[stage.id] || STAGE_ART['1950s'])(p, era);
+  (STAGE_ART[stage.id] || STAGE_ART['19XX'])(p, era);
   return c;
 }
 
@@ -272,6 +203,8 @@ function showMenu() {
   el.result.classList.add('hidden');
   el.report.classList.add('hidden');
   el.stageIntro.classList.add('hidden');
+  el.btnQuit.classList.add('hidden');
+  el.btnShift.classList.add('hidden');
   el.stageStrip.innerHTML = '';
   STAGES.forEach((stage, i) => {
     const unlocked = stageUnlocked(i);
@@ -296,11 +229,12 @@ function showMenu() {
 /* ---------- Stage intro (the era LEARNING CARD, pre-play) ---------- */
 function showStageIntro(stage) {
   const era = ERAS[stage.eraIdx];
+  const intro = stage.intro || {};   // stage copy overrides the era's (4-stage campaign spans several eras each)
   G.pendingStage = stage;
-  el.introEraTitle.textContent = `${stage.year} \u2014 ${stage.name}`;
-  el.introEraSub.textContent = era.sub;
-  el.introEraTech.innerHTML = era.tech.map(t => `<div class="era-tech-line">${t}</div>`).join('');
-  el.introEraImpact.textContent = era.impact;
+  el.introEraTitle.textContent = intro.title || `${stage.year} \u2014 ${stage.name}`;
+  el.introEraSub.textContent = intro.sub || era.sub;
+  el.introEraTech.innerHTML = (intro.tech || era.tech).map(t => `<div class="era-tech-line">${t}</div>`).join('');
+  el.introEraImpact.textContent = intro.impact || era.impact;
   const techNames = stage.tech.map(k => UPGRADE_TYPES[k].name.toUpperCase()).join(', ');
   el.introEraBrief.innerHTML =
     `<div>STANDARD OF CARE: DIAG x${era.mods.diag} \u00b7 TREAT x${era.mods.treat} \u00b7 LOBBY DECAY x${era.mods.wait}</div>` +

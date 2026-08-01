@@ -17,6 +17,7 @@
         <span class="hud-item" id="hud-lives" title="ICU capacity remaining">ICU</span>
         <span class="hud-item" id="hud-shift" title="Wave">PREP</span>
         <span class="hud-item" id="hud-waiting" title="Patients in the waiting room">WAITING 0</span>
+        <button id="btn-quit" class="hud-item hud-btn hidden" title="Back to era select">MENU</button>
         <button id="btn-mute" class="hud-item hud-btn" title="Toggle sound">SND ON</button>
       </div>
     </header>
@@ -37,7 +38,7 @@
       <div id="menu" class="overlay hidden">
         <h1>CODE BLUE DEFENSE</h1>
         <h2>WARD SHIFT</h2>
-        <p class="tagline">Nine hospitals across nine ages of medicine.<br/>
+        <p class="tagline">Four hospitals across four ages of medicine.<br/>
           Diagnose the pathogen. Allocate the bed. Nobody gets left in the waiting room.</p>
         <div id="stage-strip"></div>
         <div class="btn-row">
@@ -70,6 +71,7 @@
           <div class="btn-row">
             <button id="btn-next-shift" class="pxbtn paper-btn primary">START WAVE 2</button>
             <button id="btn-keep-building" class="pxbtn paper-btn">KEEP BUILDING</button>
+            <button id="btn-report-menu" class="pxbtn paper-btn">MENU</button>
           </div>
           <canvas id="report-hand" width="64" height="80"></canvas>
         </div>

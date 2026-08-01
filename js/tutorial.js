@@ -43,7 +43,7 @@ function domRect(el2) {
  * (null = no spotlight, center card). done() advances action steps. */
 const TUTORIAL_STEPS = [
   {
-    text: 'THIS IS YOUR HOSPITAL, 1952.<br/>PATIENTS ARRIVE AT THE LOBBY DOOR (LEFT). YOUR JOB: NOBODY LEAVES ON A STRETCHER.',
+    text: 'THIS IS YOUR HOSPITAL.<br/>PATIENTS ARRIVE AT THE LOBBY DOOR (LEFT). YOUR JOB: NOBODY LEAVES ON A STRETCHER.',
     narr: 'Welcome to your hospital. Try not to lose anyone.',
     target: () => worldRect(24, floorTopY(0) - 20, 856, 100),
     manual: true,
@@ -61,8 +61,8 @@ const TUTORIAL_STEPS = [
     done: () => G.staffList.some(s => s.typeKey === 'nurse'),
   },
   {
-    text: 'POST HER TO THE LOBBY: CLICK THE WAITING-ROOM AREA.<br/>LOBBY STAFF ASSESS WALK-INS SO YOU KNOW WHAT AILS THEM.',
-    narr: 'Post her to the lobby. Triage is everything.',
+    text: 'POST THEM TO THE LOBBY: CLICK THE WAITING-ROOM AREA.<br/>LOBBY STAFF ASSESS WALK-INS SO YOU KNOW WHAT AILS THEM.',
+    narr: 'Post them to the lobby. Triage is everything.',
     target: () => worldRect(60, floorTopY(0) - 10, 780, 90),
     done: () => lobbyStaff().length > 0,
   },
@@ -172,6 +172,11 @@ tut.el.skip.addEventListener('click', () => { ensureAudio(); G.sfx('denied'); en
 function updateTutorial() {
   if (!tut.active) return;
   if (G.state !== 'playing') { endTutorial(false); return; }
+  // STRICT OVERLAY SEQUENCING: the tutorial never renders on top of
+  // (or underneath) a modal overlay — stage intro, wave report, result,
+  // menu. It hides completely and resumes when the modal is dismissed.
+  if (modalUp()) { tut.el.root.classList.add('hidden'); return; }
+  tut.el.root.classList.remove('hidden');
   const step = TUTORIAL_STEPS[tut.step];
   if (!step) { endTutorial(true); return; }
 

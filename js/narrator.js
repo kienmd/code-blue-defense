@@ -146,18 +146,19 @@ function playClip(url) {
 }
 
 /* Voice policy: a distinguished BRITISH GENTLEMAN, fixed (no picker).
- * Prefer the highest-quality male en-GB voice available: premium/
- * enhanced variants first (macOS "Daniel (Enhanced)"), then Chrome's
- * network "Google UK English Male", then plain Daniel/Arthur/Oliver,
- * then any en-GB, then any English voice at all. */
+ * User verdict: Daniel reads robotic — prefer the OTHER natural male
+ * en-GB voices first: Arthur (macOS's newer, warmer Brit), enhanced/
+ * premium variants of anything, Chrome's network "Google UK English
+ * Male", Oliver, and only then Daniel as the last-resort Brit. */
 const VOICE_PREFERENCE = [
-  /daniel.*(enhanced|premium)/i,
-  /(enhanced|premium).*daniel/i,
-  /google uk english male/i,
-  /^daniel/i,
+  /arthur.*(enhanced|premium)/i,
   /^arthur/i,
+  /oliver.*(enhanced|premium)/i,
+  /google uk english male/i,
   /^oliver/i,
+  /(enhanced|premium)/i,          // any enhanced en-GB beats any plain one
   /uk english male/i,
+  /^daniel/i,
 ];
 
 function pickNarratorVoice() {
@@ -165,7 +166,7 @@ function pickNarratorVoice() {
   const norm = v => (v.lang || '').replace('_', '-').toLowerCase();
   const gb = voices.filter(v => norm(v).startsWith('en-gb'));
   for (const rx of VOICE_PREFERENCE) {
-    const v = gb.find(v => rx.test(v.name)) || voices.find(v => rx.test(v.name));
+    const v = gb.find(v => rx.test(v.name)) || voices.find(v => rx.test(v.name) && norm(v).startsWith('en'));
     if (v) return v;
   }
   return gb[0] || voices.find(v => norm(v).startsWith('en')) || null;
@@ -189,6 +190,33 @@ function speakWithSynthesis(text) {
       speechSynthesis.speak(u);
     } catch (_) { resolve(false); }
   });
+}
+
+/* ---------- Patient voices (flavor: spoken complaints) ----------
+ * A DIFFERENT voice than the narrator — pick a non-British English
+ * voice and vary pitch/rate per patient so the waiting room doesn't
+ * sound like one person. Fire-and-forget; never queues over the
+ * narrator (if either is speaking, the patient stays quiet). */
+function pickPatientVoice(seed) {
+  const voices = speechSynthesis.getVoices();
+  const norm = v => (v.lang || '').replace('_', '-').toLowerCase();
+  const narrName = (pickNarratorVoice() || {}).name;
+  const pool = voices.filter(v => norm(v).startsWith('en') && v.name !== narrName);
+  return pool.length ? pool[seed % pool.length] : null;
+}
+
+function speakComplaint(text, seed = 0) {
+  if (!('speechSynthesis' in window)) return;
+  if (typeof isMuted === 'function' && isMuted()) return;
+  if (narrator.speaking || speechSynthesis.speaking) return;   // never talk over the narrator
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    const voice = pickPatientVoice(seed);
+    if (voice) u.voice = voice;
+    u.rate = 1.02 + (seed % 3) * 0.06;      // per-patient variety
+    u.pitch = 1.05 + (seed % 4) * 0.1;
+    speechSynthesis.speak(u);
+  } catch (_) { /* flavor only — never break the game */ }
 }
 
 /* ---------- Subtitles (always on) ---------- */

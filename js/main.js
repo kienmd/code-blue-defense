@@ -15,6 +15,7 @@ function launchStage(stage, withTutorial) {
   setPregame(false);
   el.stageIntro.classList.add('hidden');
   el.menu.classList.add('hidden');
+  el.btnQuit.classList.remove('hidden');
   startRun(stage);
   if (withTutorial || (stage === STAGES[0] && !storage.get('cbd_tutorial_done'))) {
     startTutorial();
@@ -30,7 +31,26 @@ el.btnNextStage.addEventListener('click', () => {
   const next = STAGES[idx + 1];
   if (next && stageUnlocked(idx + 1)) { el.result.classList.add('hidden'); showStageIntro(next); }
 });
-el.btnMenu.addEventListener('click', () => { stopGameMusic(); showMenu(); startMusic(); setPregame(true); });
+/* Back to era select — always reachable: HUD MENU button (with a
+ * confirm so a mid-stage misclick doesn't torch progress), the wave
+ * report's MENU stamp, and the result screen's ERA SELECT. */
+function quitToMenu() {
+  stopGameMusic();
+  showMenu();          // updateTutorial sees state!=playing and shuts the tutorial down
+  startMusic();
+  setPregame(true);
+}
+el.btnQuit.addEventListener('click', () => {
+  ensureAudio();
+  if (G.state === 'playing' && !window.confirm('Return to era select? This stage\u2019s progress will be lost.')) return;
+  quitToMenu();
+});
+el.btnReportMenu.addEventListener('click', () => {
+  ensureAudio();
+  if (!window.confirm('Return to era select? This stage\u2019s progress will be lost.')) return;
+  quitToMenu();
+});
+el.btnMenu.addEventListener('click', () => quitToMenu());
 el.btnShift.addEventListener('click', () => { ensureAudio(); G.sfx('buy'); startShift(); });
 el.btnTutorial.addEventListener('click', () => { el.menu.classList.add('hidden'); launchStage(STAGES[0], true); });
 

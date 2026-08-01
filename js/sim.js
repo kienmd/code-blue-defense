@@ -30,6 +30,7 @@ function startRun(stage) {
   G.texts = [];
   G.particles = [];
   G.zoom = 1;
+  G.ambulance = null;
 
   // Pre-built era hospital: this stage's starting rooms + staff.
   for (const pb of stage.prebuilt) {
@@ -159,9 +160,12 @@ function endShift() {
 }
 
 /* ---------- Spawning + allocation ---------- */
-function spawnPatient(type) {
+let patientSeq = 0;   // seed for per-patient flavor (spoken voice variety)
+
+function spawnPatient(type, arrival = {}) {
   const p = new Patient(type);
   p.spawnT = G.time;                           // for cure-speed / wait-time report stats
+  p.seq = patientSeq++;
   let spot = G.waitSpots.indexOf(null);
   if (spot === -1) spot = WAIT_SPOTS - 1;      // overflow: crowd the last spot
   else G.waitSpots[spot] = p;
@@ -169,6 +173,14 @@ function spawnPatient(type) {
   p.path = [{ x: waitSpotX(spot), y: floorWalkY(0) }];
   G.patients.push(p);
   narrate('firstPatient');
+
+  // FLAVOR: rarely a patient SPRINTS in screaming (never the calm
+  // ambulance hand-off — the paramedics did their job).
+  if (!arrival.byAmbulance && Math.random() < 0.08) {
+    p.speedMult = 2.6;
+    p.screamUntil = G.time + 1.6;              // renderer shows the '!'
+    G.sfx('scream');
+  }
 
   // Walk-in copay (ECONOMY.md): the income floor — a shift never grosses $0.
   const copay = Math.round(COPAY * currentEra().inflation);
@@ -181,7 +193,15 @@ function spawnPatient(type) {
   const run = G.runToken;
 
   // Presenting complaint: fire-and-forget flavor (LLM or canned table).
-  generateComplaint(p).then(line => { if (G.runToken === run && !p.outcome) p.complaint = line; });
+  generateComplaint(p).then(line => {
+    if (G.runToken !== run || p.outcome) return;
+    p.complaint = line;
+    // FLAVOR: a few patients say it OUT LOUD (different voice than the
+    // narrator, occasional so the waiting room doesn't become a choir).
+    if (Math.random() < 0.18 && typeof speakComplaint === 'function') {
+      speakComplaint(line, p.seq);
+    }
+  });
 
   // AGENTIC LAB-ROUTER (or the free 2030s+ era baseline):
   // instant AI diagnosis on arrival.
@@ -314,10 +334,27 @@ function update(dt) {
     if (!G.eraCard) {
       G.shiftElapsed += dt;
       while (G.schedule.length && G.schedule[0].t <= G.shiftElapsed) {
-        spawnPatient(G.schedule.shift().type);
+        const type = G.schedule.shift().type;
+        // FLAVOR: sometimes the patient arrives BY AMBULANCE — a pixel
+        // rig pulls up outside and delivers them (one at a time; every
+        // era has period transport, the renderer dresses it).
+        if (!G.ambulance && Math.random() < 0.18) {
+          G.ambulance = { t: 0, type, delivered: false };
+          G.sfx('sirenblip');
+        } else {
+          spawnPatient(type);
+        }
       }
     }
-    if (!G.schedule.length && G.patients.length === 0) {
+    if (G.ambulance) {
+      G.ambulance.t += dt;
+      if (!G.ambulance.delivered && G.ambulance.t >= 1.5) {
+        G.ambulance.delivered = true;
+        spawnPatient(G.ambulance.type, { byAmbulance: true });
+      }
+      if (G.ambulance.t >= 3.6) G.ambulance = null;
+    }
+    if (!G.schedule.length && G.patients.length === 0 && !G.ambulance) {
       if (G.shiftIdx >= G.stage.waves.length - 1) { endRun(true); return; }
       endShift();
     }
@@ -383,6 +420,7 @@ function updatePatients(dt) {
       if (moveAlongPath(p, dt)) {
         if (p.state === 'arriving') {
           p.state = 'waiting';
+          p.speedMult = 1;                             // the sprinter calms down once seated
           if (Math.random() < 0.65) p.blurtT = 3;      // blurt on sit-down
         } else {
           p.state = 'inBed';

@@ -29,7 +29,7 @@ function moveAlongPath(ent, dt) {
     const tgt = ent.path[0];
     const dx = tgt.x - ent.x, dy = tgt.y - ent.y;
     const vertical = Math.abs(dy) > 0.5 && Math.abs(dx) < 0.5;
-    const speed = vertical ? ELEV_SPEED : WALK_SPEED;
+    const speed = (vertical ? ELEV_SPEED : WALK_SPEED) * (ent.speedMult || 1);
     const dist = Math.hypot(dx, dy);
     const step = speed * remaining;
     if (dist <= step) {
@@ -117,6 +117,10 @@ class Staff {
     this.diagPatient = null;        // lobby triage in progress
     this.diagT = 0;
     this.bob = Math.random() * Math.PI * 2;
+    // per-person presentation (skin / hair / hair style) — roles are
+    // not visually gender-coded to any one look
+    const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+    this.look = { skin: pick(PATIENT_SKINS), hair: pick(PATIENT_HAIRS), style: Math.floor(Math.random() * 3) };
   }
 
   isBurnedOut(time) { return time < this.burnoutUntil; }
@@ -297,20 +301,36 @@ function drawPresentingTell(ctx, typeKey, t, look = DEFAULT_LOOK) {
 /* `outfit` overrides the scrub color — render.js passes the current
  * era's palette so uniforms march through the decades (1950s whites
  * -> teal 70s scrubs -> future bodysuits). */
-function drawStaffSprite(ctx, typeKey, cx, cy, bobPhase = 0, outfit = null) {
+/* Staff sprites vary per person (skin tone, hair color, hair style),
+ * so no role reads as one gender: some nurses have a buzz cut, some
+ * doctors wear their hair long, and so on. `look` comes from the
+ * Staff instance; shop icons pass null and get a neutral default. */
+const STAFF_DEFAULT_LOOK = { skin: '#e8b088', hair: '#5a4632', style: 0 };
+
+function drawStaffHair(ctx, look, capped) {
+  // style 0: short crop (top only) — 1: side-length hair — 2: tied back
+  ctx.fillStyle = look.hair;
+  if (!capped) ctx.fillRect(-5, -22, 10, 3);
+  if (look.style === 1) { ctx.fillRect(-6, -20, 2, 6); ctx.fillRect(4, -20, 2, 6); }
+  else if (look.style === 2) ctx.fillRect(-7, -21, 2, 4);   // bun at the back
+}
+
+function drawStaffSprite(ctx, typeKey, cx, cy, bobPhase = 0, outfit = null, look = STAFF_DEFAULT_LOOK) {
   const bob = Math.round(Math.sin(bobPhase) * 1);
   const scrub = outfit || '#7fd4e8';
   ctx.save();
   ctx.translate(Math.round(cx), Math.round(cy + bob));
   if (typeKey === 'nurse') {
-    ctx.fillStyle = '#f2b8a0'; ctx.fillRect(-4, -20, 8, 6);            // head
+    ctx.fillStyle = look.skin; ctx.fillRect(-4, -20, 8, 6);            // head
+    drawStaffHair(ctx, look, true);
     ctx.fillStyle = PALETTE.white; ctx.fillRect(-5, -23, 10, 4);       // cap
     ctx.fillStyle = PALETTE.red; ctx.fillRect(-1, -23, 2, 4);          // cap cross
     ctx.fillStyle = scrub; ctx.fillRect(-6, -14, 12, 12);              // scrubs
     ctx.fillStyle = PALETTE.white; ctx.fillRect(-2, -12, 4, 6);        // apron
     ctx.fillStyle = PALETTE.ink; ctx.fillRect(-4, -2, 3, 2); ctx.fillRect(1, -2, 3, 2);
   } else if (typeKey === 'surgeon') {
-    ctx.fillStyle = '#e0c8a8'; ctx.fillRect(-4, -20, 8, 6);            // head
+    ctx.fillStyle = look.skin; ctx.fillRect(-4, -20, 8, 6);            // head
+    drawStaffHair(ctx, look, true);
     ctx.fillStyle = scrub; ctx.fillRect(-5, -23, 10, 4);               // scrub cap
     ctx.fillStyle = '#dfe8ec'; ctx.fillRect(-4, -17, 8, 3);            // surgical mask
     ctx.fillStyle = scrub; ctx.fillRect(-6, -14, 12, 12);              // gown
@@ -318,15 +338,15 @@ function drawStaffSprite(ctx, typeKey, cx, cy, bobPhase = 0, outfit = null) {
     ctx.fillStyle = '#f2d8b8'; ctx.fillRect(-8, -10, 2, 4); ctx.fillRect(6, -10, 2, 4); // gloves up
     ctx.fillStyle = PALETTE.ink; ctx.fillRect(-4, -2, 3, 2); ctx.fillRect(1, -2, 3, 2);
   } else if (typeKey === 'orderly') {
-    ctx.fillStyle = '#d8a878'; ctx.fillRect(-4, -20, 8, 6);            // head
-    ctx.fillStyle = '#3a3a44'; ctx.fillRect(-5, -22, 10, 3);           // hair
+    ctx.fillStyle = look.skin; ctx.fillRect(-4, -20, 8, 6);            // head
+    drawStaffHair(ctx, look, false);
     ctx.fillStyle = '#8a94a4'; ctx.fillRect(-6, -14, 12, 12);          // grey uniform
     ctx.fillStyle = '#59616e'; ctx.fillRect(-6, -8, 12, 2);            // belt
     ctx.fillStyle = PALETTE.white; ctx.fillRect(2, -13, 3, 3);         // badge
     ctx.fillStyle = PALETTE.ink; ctx.fillRect(-4, -2, 3, 2); ctx.fillRect(1, -2, 3, 2);
   } else {
-    ctx.fillStyle = '#e8b088'; ctx.fillRect(-4, -20, 8, 6);            // head
-    ctx.fillStyle = '#5a4632'; ctx.fillRect(-5, -22, 10, 3);           // hair
+    ctx.fillStyle = look.skin; ctx.fillRect(-4, -20, 8, 6);            // head
+    drawStaffHair(ctx, look, false);
     ctx.fillStyle = PALETTE.white; ctx.fillRect(-7, -14, 14, 13);      // lab coat
     ctx.fillStyle = scrub; ctx.fillRect(-2, -14, 4, 7);                // shirt
     ctx.fillStyle = PALETTE.ink;                                        // stethoscope
