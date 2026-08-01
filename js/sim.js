@@ -141,6 +141,7 @@ function stageStarRating() {
 function endRun(won) {
   G.state = won ? 'won' : 'lost';
   G.selection = null;
+  narratorStop();                            // flush mid-wave chatter before the verdict
   let stars = 0;
   if (won) {
     settleLedger();                          // final wave's drains still land
@@ -151,7 +152,7 @@ function endRun(won) {
   refreshShiftButton();
   narrate(won ? 'win' : 'lose', { always: true });
   stopGameMusic();
-  if (won) { playSfx('discharge'); setTimeout(() => playSfx('buy'), 200); } else { playSfx('transfer'); }
+  playWaveJingle(won);         // stage verdict: triumphant or somber sting
 }
 
 function endShift() {
@@ -413,8 +414,9 @@ function update(dt) {
     if (G.buildFlash.t > 1.2) G.buildFlash = null;
   }
   if (G.eraCard) {
+    // Player-paced: the decade card HOLDS until clicked (input.js
+    // dismisses it) — no timed auto-advance, reading is never rushed.
     G.eraCard.t += dt;
-    if (G.eraCard.t > ERA_CARD_SECONDS) G.eraCard = null;
   }
 
   // In-place compaction (no per-frame array allocation)

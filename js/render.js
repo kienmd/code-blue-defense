@@ -498,27 +498,25 @@ function drawRoof(era, bTop) {
   }
 }
 
-/* Age of War-style decade card: slides in from the left, SITS for
- * several seconds (click to skip), fades out. Arrivals hold while
- * it's up — reading it is never punished. Screen space. */
+/* Age of War-style decade card: slides in from the left, then HOLDS
+ * until the player clicks (player-paced — no timed fade-out; input.js
+ * dismisses it). Arrivals hold while it's up. Screen space. */
 function drawEraCard(card) {
-  const IN = 0.5, HOLD = ERA_CARD_HOLD;                    // + fade = ERA_CARD_SECONDS
+  const IN = 0.5;
   const t = card.t;
   const cx = canvas.width / 2, cy = canvas.height * 0.36;
-  let slide = 0, alpha = 1;
+  let slide = 0;
   if (t < IN) {
     const f = 1 - t / IN;
     slide = -f * f * canvas.width * 0.6;                   // ease-out sweep
-  } else if (t > IN + HOLD) {
-    alpha = Math.max(0, 1 - (t - IN - HOLD) / (ERA_CARD_SECONDS - IN - HOLD));
   }
-  ctx.globalAlpha = alpha * 0.55;
+  ctx.globalAlpha = 0.55;
   ctx.fillStyle = '#060a14';
-  ctx.fillRect(0, cy - 64, canvas.width, 122);
-  ctx.globalAlpha = alpha;
+  ctx.fillRect(0, cy - 64, canvas.width, 136);
+  ctx.globalAlpha = 1;
   ctx.fillStyle = PALETTE.amber;
   ctx.fillRect(0, cy - 64, canvas.width, 3);
-  ctx.fillRect(0, cy + 55, canvas.width, 3);
+  ctx.fillRect(0, cy + 69, canvas.width, 3);
   ctx.textAlign = 'center';
   ctx.font = '42px "Press Start 2P", monospace';
   ctx.fillStyle = '#3a2600';
@@ -531,6 +529,11 @@ function drawEraCard(card) {
   ctx.font = '7px "Press Start 2P", monospace';
   ctx.fillStyle = '#8aa0b8';
   ctx.fillText(card.body, cx, cy + 44);
+  // gentle pulsing prompt — the card waits for the player
+  if (t > IN + 0.4 && Math.floor(G.time * 1.6) % 2 === 0) {
+    ctx.fillStyle = PALETTE.white;
+    ctx.fillText('\u25B6 CLICK TO BEGIN', cx, cy + 62);
+  }
   ctx.globalAlpha = 1;
   ctx.textAlign = 'left';
 }

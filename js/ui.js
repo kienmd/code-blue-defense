@@ -261,16 +261,19 @@ function drawReportHand() {
   const hctx = c.getContext('2d');
   hctx.imageSmoothingEnabled = false;
   const px = (x, y, w, h, col) => { hctx.fillStyle = col; hctx.fillRect(x * 4, y * 4, w * 4, h * 4); };
-  const SKIN = '#e8b088', SHADE = '#c08858', CUFF = '#3a6ea5';
-  // fist coming up from below, thumb pressed over the paper edge
-  px(3, 8, 10, 8, SKIN);          // fist
-  px(3, 14, 10, 2, SHADE);
-  px(2, 16, 12, 4, CUFF);         // scrub cuff
-  px(5, 2, 4, 7, SKIN);           // thumb over the page
-  px(5, 2, 4, 1, SHADE);
-  px(9, 3, 1, 5, SHADE);
-  // knuckle lines
-  px(6, 10, 1, 1, SHADE); px(9, 10, 1, 1, SHADE); px(12, 10, 1, 1, SHADE);
+  // A DOCTOR'S hand: white latex glove + white coat sleeve at the wrist
+  const GLOVE = '#f0f2f4', GSHADE = '#c2c8d0', COAT = '#ffffff', COATSHADE = '#d8dce4';
+  // gloved fist coming up from below, thumb pressed over the paper edge
+  px(3, 8, 10, 8, GLOVE);         // fist
+  px(3, 14, 10, 2, GSHADE);
+  px(2, 16, 12, 1, GSHADE);       // glove roll at the wrist
+  px(1, 17, 14, 3, COAT);         // white coat sleeve
+  px(1, 19, 14, 1, COATSHADE);
+  px(5, 2, 4, 7, GLOVE);          // thumb over the page
+  px(5, 2, 4, 1, GSHADE);
+  px(9, 3, 1, 5, GSHADE);
+  // knuckle creases
+  px(6, 10, 1, 1, GSHADE); px(9, 10, 1, 1, GSHADE); px(12, 10, 1, 1, GSHADE);
 }
 
 function showShiftReport() {
@@ -324,6 +327,7 @@ function showShiftReport() {
   void el.reportPaper.offsetWidth;
   el.reportPaper.classList.add('slide-in');
   G.sfx('paper');
+  playWaveJingle(passed);      // mission-complete sting (somber if transfers)
 }
 
 function refreshShiftButton() {

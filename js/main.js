@@ -31,25 +31,35 @@ el.btnNextStage.addEventListener('click', () => {
   const next = STAGES[idx + 1];
   if (next && stageUnlocked(idx + 1)) { el.result.classList.add('hidden'); showStageIntro(next); }
 });
-/* Back to era select — always reachable: HUD MENU button (with a
- * confirm so a mid-stage misclick doesn't torch progress), the wave
- * report's MENU stamp, and the result screen's ERA SELECT. */
-function quitToMenu() {
+/* Back to era select — always reachable: HUD MENU button, the wave
+ * report's MENU stamp, and the result screen's ERA SELECT. Mid-stage
+ * quits use a click-twice confirm (no native dialogs in an 8-bit
+ * game): first click arms "SURE?" for 3 seconds, second click quits. */
+function quitToMenu(goodbye) {
+  if (goodbye) narrateGoodbye();     // cancels all other speech first
+  else narratorStop();               // nobody talks over the menu
   stopGameMusic();
   showMenu();          // updateTutorial sees state!=playing and shuts the tutorial down
   startMusic();
   setPregame(true);
 }
-el.btnQuit.addEventListener('click', () => {
+let quitArmTimer = null;
+function armQuit(btn, label) {
   ensureAudio();
-  if (G.state === 'playing' && !window.confirm('Return to era select? This stage\u2019s progress will be lost.')) return;
-  quitToMenu();
-});
-el.btnReportMenu.addEventListener('click', () => {
-  ensureAudio();
-  if (!window.confirm('Return to era select? This stage\u2019s progress will be lost.')) return;
-  quitToMenu();
-});
+  if (btn.dataset.armed === '1') {
+    btn.dataset.armed = '';
+    btn.textContent = label;
+    quitToMenu(true);                // confirmed exit: the narrator says goodbye
+    return;
+  }
+  G.sfx('denied');
+  btn.dataset.armed = '1';
+  btn.textContent = 'SURE?';
+  clearTimeout(quitArmTimer);
+  quitArmTimer = setTimeout(() => { btn.dataset.armed = ''; btn.textContent = label; }, 3000);
+}
+el.btnQuit.addEventListener('click', () => armQuit(el.btnQuit, 'MENU'));
+el.btnReportMenu.addEventListener('click', () => armQuit(el.btnReportMenu, 'MENU'));
 el.btnMenu.addEventListener('click', () => quitToMenu());
 el.btnShift.addEventListener('click', () => { ensureAudio(); G.sfx('buy'); startShift(); });
 el.btnTutorial.addEventListener('click', () => { el.menu.classList.add('hidden'); launchStage(STAGES[0], true); });

@@ -32,6 +32,8 @@ function setMuted(m) {
   muted = m;
   try { localStorage.setItem('cbd_muted', m ? '1' : '0'); } catch (_) { /* ignore */ }
   if (masterGain) masterGain.gain.value = m ? 0 : 1;
+  // muting also silences in-flight narration/patient speech immediately
+  if (m && typeof narratorStop === 'function') narratorStop();
 }
 
 /* Duck the theme under speech (narration hook). */
@@ -146,6 +148,46 @@ function playSfx(name) {
     return;
   }
   fn();
+}
+
+/* ---------- Wave-report jingle ----------
+ * Original mission-complete sting (GTA-spirit, no sampled audio):
+ * ~5s triumphant chiptune fanfare — arpeggio up, IV-V swell, big I
+ * resolution with a high shimmer. Failed waves get a shorter, somber
+ * minor variant. Background music ducks under it and resumes after. */
+function playWaveJingle(passed) {
+  ensureAudio();
+  if (!audioCtx || muted) return;
+  const durMs = passed ? 5200 : 3200;
+  duckMusic(true);
+  setTimeout(() => duckMusic(false), durMs);
+
+  const chord = (when, freqs, dur, vol = 0.03, type = 'square') =>
+    freqs.forEach(f => tone(f, dur, type, vol, when));
+  const mel = (when, f, dur, vol = 0.045, type = 'square') => tone(f, dur, type, vol, when);
+
+  if (passed) {
+    // fanfare up: C -> F -> G -> C(big)
+    chord(0.0, [N.C3, N.C4, N.E4, N.G4], 0.55, 0.028, 'triangle');
+    mel(0.00, N.G4, 0.14); mel(0.14, N.C5, 0.14); mel(0.28, N.E5, 0.14); mel(0.42, N.G5, 0.5);
+    chord(1.0, [N.F2, N.F4, N.A4, N.C5], 0.6, 0.028, 'triangle');
+    mel(1.00, N.A5, 0.3); mel(1.32, N.G5, 0.3);
+    chord(1.8, [N.G2, N.G4, N.B4, N.D5], 0.6, 0.028, 'triangle');
+    mel(1.80, N.F5, 0.22); mel(2.04, N.D5, 0.22); mel(2.28, N.B4, 0.34);
+    // the big resolution
+    chord(2.8, [N.C3, N.G3, N.C4, N.E4, N.G4], 2.0, 0.03, 'triangle');
+    mel(2.80, N.C6, 0.7, 0.05);
+    mel(3.10, N.G5, 1.2, 0.028, 'triangle');
+    mel(3.55, N.C6, 1.4, 0.02, 'triangle');            // shimmer tail
+  } else {
+    // somber: Am descent, unresolved-ish low ending
+    chord(0.0, [N.A2, N.C4, N.E4], 0.7, 0.026, 'triangle');
+    mel(0.00, N.E5, 0.3); mel(0.34, N.D5, 0.3); mel(0.70, N.C5, 0.34);
+    chord(1.1, [N.F2, N.A4, N.C5], 0.7, 0.024, 'triangle');
+    mel(1.10, N.B4, 0.4);
+    chord(1.9, [N.A2, N.E4, N.A4], 1.2, 0.026, 'triangle');
+    mel(1.90, N.A4, 0.9, 0.035);
+  }
 }
 
 /* ---------- Intro theme ----------

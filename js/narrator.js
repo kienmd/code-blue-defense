@@ -63,7 +63,40 @@ function narratorKey() {
 
 function narratorReset() {
   narrator.said.clear();
+  narratorStop();
+}
+
+/* HARD STOP: kill in-flight speech + the queue + the subtitle. Called
+ * on exit-to-menu, stage end, mute, tab hide, and page unload — nobody
+ * keeps narrating a screen the player has already left. Cancels the
+ * patient voices too (same speechSynthesis engine). */
+function narratorStop() {
   narrator.queue.length = 0;
+  narrator.speaking = false;
+  try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (_) { /* no speech */ }
+  clearTimeout(narrator.subtitleTimer);
+  const elSub = document.getElementById('subtitle');
+  if (elSub) elSub.classList.add('hidden');
+  if (typeof duckMusic === 'function') duckMusic(false);
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', narratorStop);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) narratorStop(); });
+}
+
+/* Exit-to-menu goodbye: one short line, spoken AFTER everything else
+ * is cancelled; never blocks the menu (speech is async). */
+const GOODBYE_LINES = [
+  "Good shift, doctor. See you on the ward.",
+  "Off you go. The ward will keep.",
+  "Rest well, doctor. Medicine never sleeps — but you should.",
+  "Until next shift. Do give my regards to the vending machine.",
+];
+function narrateGoodbye() {
+  narratorStop();
+  const line = GOODBYE_LINES[Math.floor(Math.random() * GOODBYE_LINES.length)];
+  narrate(`bye_${Date.now()}`, { always: true, text: line });
 }
 
 /* ---------- Public entry: narrate('lineId', { always, text }) ---------- */
